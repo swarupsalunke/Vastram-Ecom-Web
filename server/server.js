@@ -17,7 +17,22 @@ dotenv.config();
 const app = express();
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
-app.use(cors({ origin: process.env.CLIENT_URL?.split(",") || "http://localhost:5173" }));
+
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://vastram-ecom-web.vercel.app"
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  }
+}));
+
 // Razorpay webhook needs the raw request body for signature verification.
 app.use("/api/payments/webhook", express.raw({ type: "application/json" }));
 app.use(express.json({ limit: "1mb" }));
