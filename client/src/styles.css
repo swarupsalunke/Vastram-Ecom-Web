@@ -76,6 +76,27 @@ button:disabled {
     color: var(--orange)
 }
 
+.info-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin: 0 auto;
+}
+
+.info-nav a {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: color .18s;
+}
+
+.info-nav a:hover,
+.info-nav a:focus-visible {
+    color: var(--orange-dark);
+}
+
 .top-actions {
     display: flex;
     align-items: center;
@@ -1031,6 +1052,14 @@ textarea {
 }
 
 @media(max-width:1150px) {
+    .info-nav {
+        gap: 8px
+    }
+
+    .info-nav a {
+        font-size: 11px
+    }
+
     .product-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr))
     }
@@ -1351,5 +1380,31 @@ textarea {
 @media (max-width: 1023px) {
   .mobile-menu {
     display: flex;
+  }
+
+  .info-nav {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 21;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0;
+    margin: 0;
+    padding: 8px 16px;
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 12px 24px #18233312;
+  }
+
+  .info-nav.info-nav-open {
+    display: flex;
+  }
+
+  .info-nav a {
+    padding: 10px 4px;
+    font-size: 14px;
   }
 }

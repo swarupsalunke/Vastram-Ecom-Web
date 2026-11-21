@@ -7,6 +7,13 @@ import Notice from "./components/Notice";
 import api from "./api";
 import { useCart } from "./context/CartContext";
 import Pagination from "./components/Pagination";
+import AboutUs from "./pages/AboutUs";
+import ContactUs from "./pages/ContactUs";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsConditions from "./pages/TermsConditions";
+import ShippingPolicy from "./pages/ShippingPolicy";
+import ReturnPolicy from "./pages/ReturnPolicy";
+import RefundPolicy from "./pages/RefundPolicy";
 import { Search, SlidersHorizontal, Plus, Pencil, Trash2, Package, ShoppingBag, Users, IndianRupee, X, Warehouse, Eye, CheckCircle, Clock, Truck, MessageSquare, TicketPercent } from "lucide-react";
 
 const money = n => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(Number(n || 0));
@@ -421,6 +428,13 @@ export default function App() {
     <Route path="/admin/coupons" element={<AdminOnly><AdminCoupons /></AdminOnly>} />
     <Route path="/admin/reports" element={<AdminOnly><AdminReports /></AdminOnly>} />
     <Route path="/admin/settings" element={<AdminOnly><AdminSettings /></AdminOnly>} />
+    <Route path="/about" element={<AboutUs />} />
+    <Route path="/contact" element={<ContactUs />} />
+    <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+    <Route path="/terms-and-conditions" element={<TermsConditions />} />
+    <Route path="/shipping-policy" element={<ShippingPolicy />} />
+    <Route path="/return-policy" element={<ReturnPolicy />} />
+    <Route path="/refund-policy" element={<RefundPolicy />} />
     <Route path="*" element={<div className="page empty"><h2>Page not found</h2><a className="button" href="/">Return home</a></div>} />
   </Routes></Layout>;
 }
