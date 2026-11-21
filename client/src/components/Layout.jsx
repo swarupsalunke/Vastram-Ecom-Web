@@ -39,6 +39,7 @@ export default function Layout({ children }) {
 
         {/* Information Pages Navigation */}
         <nav className={`info-nav ${open ? "info-nav-open" : ""}`}>
+          <Link to="/" onClick={() => setOpen(false)}>Home</Link>
           <Link to="/about" onClick={() => setOpen(false)}>About Us</Link>
           <Link to="/contact" onClick={() => setOpen(false)}>Contact Us</Link>
           <Link to="/privacy-policy" onClick={() => setOpen(false)}>Privacy Policy</Link>
