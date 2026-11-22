@@ -3,6 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
+import { uploadDirectory } from "./src/utils/uploads.js";
 import authRoutes from "./src/routes/authRoutes.js";
 import cartRoutes from "./src/routes/cartRoutes.js";
 import productRoutes from "./src/routes/productRoutes.js";
@@ -16,6 +17,7 @@ import { expirePendingInventoryReservations } from "./src/utils/inventory.js";
 
 dotenv.config();
 const app = express();
+app.set("trust proxy", 1);
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 
@@ -33,6 +35,7 @@ app.use(cors({
     }
   }
 }));
+app.use("/uploads", express.static(uploadDirectory, { dotfiles: "deny", maxAge: "1d", immutable: true }));
 
 // Razorpay webhook needs the raw request body for signature verification.
 app.use("/api/payments/webhook", express.raw({ type: "application/json" }));

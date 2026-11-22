@@ -1,8 +1,25 @@
 import { Router } from "express";
+import { randomUUID } from "node:crypto";
+import { open, unlink } from "node:fs/promises";
+import multer from "multer";
 import Product from "../models/Product.js";
 import Category from "../models/Category.js";
 import { protect, adminOnly } from "../middleware/auth.js";
+import { uploadDirectory } from "../utils/uploads.js";
 const router = Router();
+const imageExtensions = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp" };
+const maxImageCount = 10;
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: uploadDirectory,
+    filename: (_req, file, callback) => callback(null, `${randomUUID()}${imageExtensions[file.mimetype]}`)
+  }),
+  limits: { fileSize: 5 * 1024 * 1024, files: maxImageCount },
+  fileFilter: (_req, file, callback) => {
+    if (!imageExtensions[file.mimetype]) return callback(new UnsupportedImageTypeError());
+    callback(null, true);
+  }
+});
 
 router.get("/", async (req, res, next) => {
   try {
@@ -27,6 +44,31 @@ router.get("/", async (req, res, next) => {
 });
 router.get("/admin/all", protect, adminOnly, async (_req, res, next) => {
   try { res.json(await Product.find().populate("category", "name gender requiresSize").sort({ createdAt: -1 })); } catch (e) { next(e); }
+});
+router.post("/images", protect, adminOnly, (req, res, next) => {
+  upload.array("images", maxImageCount)(req, res, async error => {
+    if (error instanceof multer.MulterError) {
+      const tooLarge = error.code === "LIMIT_FILE_SIZE";
+      const tooMany = error.code === "LIMIT_FILE_COUNT";
+      return res.status(tooLarge ? 413 : 400).json({
+        message: tooLarge ? "Each image must be 5 MB or smaller." : tooMany ? "Upload up to 10 images at a time." : "Invalid image upload."
+      });
+    }
+    if (error instanceof UnsupportedImageTypeError) return res.status(400).json({ message: error.message });
+    if (error) return next(error);
+    const files = req.files || [];
+    if (!files.length) return res.status(400).json({ message: "Choose at least one image to upload." });
+    try {
+      const signaturesValid = await Promise.all(files.map(hasValidImageSignature));
+      if (!signaturesValid.every(Boolean)) {
+        await Promise.all(files.map(file => unlink(file.path)));
+        return res.status(400).json({ message: "One or more selected files are not valid images." });
+      }
+    } catch (validationError) { return next(validationError); }
+    const protocol = req.protocol;
+    const host = req.get("host");
+    res.status(201).json({ images: files.map(file => `${protocol}://${host}/uploads/${file.filename}`) });
+  });
 });
 router.get("/:id", async (req, res, next) => {
   try {
@@ -128,5 +170,17 @@ function normalizeSubcategory(category, value) {
 }
 function isSizeFreeCategory(name) {
   return /^sarees?$/i.test(String(name || "").trim());
+}
+class UnsupportedImageTypeError extends Error {
+  constructor() { super("Only JPG, PNG, and WebP images are supported."); }
+}
+async function hasValidImageSignature(file) {
+  const handle = await open(file.path, "r");
+  const header = Buffer.alloc(12);
+  try { await handle.read(header, 0, header.length, 0); }
+  finally { await handle.close(); }
+  if (file.mimetype === "image/jpeg") return header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
+  if (file.mimetype === "image/png") return header.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  return file.mimetype === "image/webp" && header.toString("ascii", 0, 4) === "RIFF" && header.toString("ascii", 8, 12) === "WEBP";
 }
 export default router;
