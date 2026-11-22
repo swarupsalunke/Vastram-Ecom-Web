@@ -18,10 +18,8 @@ import { Search, SlidersHorizontal, Plus, Pencil, Trash2, Package, ShoppingBag, 
 
 const money = n => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(Number(n || 0));
 const imageFallback = "https://placehold.co/600x750/f6f6f6/777?text=Vastram";
-function imagesForColor(product, color) {
-  const variant = product.colorVariants?.find(item => item.color === color);
-  return variant?.images?.length ? variant.images : product.images?.length ? product.images : [imageFallback];
-}
+const isSizeFreeCategory = name => /^sarees?$/i.test(String(name || "").trim());
+const stockFromSizeText = value => String(value || "").split(",").reduce((total, entry) => total + Math.max(0, Number(entry.split(":")[1]) || 0), 0);
 function useLoad(url, deps = []) {
   const [data, setData] = useState([]); const [loading, setLoading] = useState(true); const [error, setError] = useState("");
   const reload = async () => { setLoading(true); setError(""); try { const r = await api.get(url); setData(r.data); } catch (e) { setError(e.response?.data?.message || "Could not load data."); } finally { setLoading(false); } };
@@ -62,11 +60,11 @@ function ProductCard({ product, onAdd }) {
   const sizes = (product.sizes || []).filter(s => s.stock > 0);
   const size = selection.size || sizes[0]?.size || "";
   const color = selection.color ?? product.colors?.[0] ?? "";
-  const images = imagesForColor(product, color);
+  const sizeFree = isSizeFreeCategory(product.categoryName);
   return <article className="product-card">
-    <div className="product-image"><Link className="product-image-link" to={`/products/${product._id}`} aria-label={`View ${product.name}`}><img src={images[0]} alt={product.name} onError={e => { e.currentTarget.src = imageFallback; }} /></Link>{product.featured && <span className="image-tag">FEATURED</span>}</div>
+    <div className="product-image"><Link className="product-image-link" to={`/products/${product._id}`} aria-label={`View ${product.name}`}><img src={product.images?.[0] || imageFallback} alt={product.name} onError={e => { e.currentTarget.src = imageFallback; }} /></Link>{product.featured && <span className="image-tag">FEATURED</span>}</div>
     <div className="product-info"><div className="product-meta">{product.gender} · {product.categoryName}</div><h3><Link to={`/products/${product._id}`}>{product.name}</Link></h3><div className="price-row"><strong>{money(product.price)}</strong>{product.compareAtPrice > product.price && <del>{money(product.compareAtPrice)}</del>}</div>
-      <div className="product-options"><select aria-label="Select size" value={size} onChange={e => setSelection(p => ({ ...p, size: e.target.value }))}><option value="">Select size</option>{sizes.map(s => <option key={s.size} value={s.size}>{s.size}</option>)}</select><select aria-label="Select color" value={color} onChange={e => setSelection(p => ({ ...p, color: e.target.value }))}><option value="">Select color</option>{(product.colors || []).map(c => <option key={c}>{c}</option>)}</select></div>
+      {(!sizeFree || product.colors?.length > 0) && <div className="product-options">{!sizeFree && <select aria-label="Select size" value={size} onChange={e => setSelection(p => ({ ...p, size: e.target.value }))}><option value="">Select size</option>{sizes.map(s => <option key={s.size} value={s.size}>{s.size}</option>)}</select>}{product.colors?.length > 0 && <select aria-label="Select color" value={color} onChange={e => setSelection(p => ({ ...p, color: e.target.value }))}><option value="">Select color</option>{product.colors.map(c => <option key={c}>{c}</option>)}</select>}</div>}
       <button className="button full" disabled={!size || (!color && (product.colors || []).length > 0) || !sizes.length} onClick={() => { onAdd(product, size, color); setMessage("Added to cart"); setTimeout(() => setMessage(""), 1600); }}>{sizes.length ? "Add to cart" : "Out of stock"}</button>{message && <small className="success-text">{message}</small>}
     </div>
   </article>;
@@ -119,8 +117,9 @@ function ProductDetail() {
   if (error || !product) return <div className="page"><Notice message={error || "Product not found."} type="error" /><Link className="button secondary" to="/"><ArrowLeft size={16} /> Back to shop</Link></div>;
 
   const sizes = (product.sizes || []).filter(item => item.stock > 0);
-  const images = imagesForColor(product, color);
+  const images = product.images?.length ? product.images : [imageFallback];
   const categoryId = product.category?._id || product.category;
+  const sizeFree = isSizeFreeCategory(product.categoryName);
 
   const addToCart = () => {
     setAdding(true);
@@ -145,11 +144,11 @@ function ProductDetail() {
         <div className="detail-price"><strong>{money(product.price)}</strong>{product.compareAtPrice > product.price && <del>{money(product.compareAtPrice)}</del>}</div>
         <p className="detail-description">{product.description || "A thoughtfully selected piece from our collection."}</p>
         <div className="detail-facts"><span>Category</span><strong>{product.categoryName}</strong><span>For</span><strong>{product.gender}</strong></div>
-        <label>Size<select value={size} onChange={e => setSize(e.target.value)}><option value="">Select size</option>{sizes.map(item => <option key={item.size} value={item.size}>{item.size} · {item.stock} available</option>)}</select></label>
+        {!sizeFree && <label>Size<select value={size} onChange={e => setSize(e.target.value)}><option value="">Select size</option>{sizes.map(item => <option key={item.size} value={item.size}>{item.size} · {item.stock} available</option>)}</select></label>}
         {product.colors?.length > 0 && <label>Color<select value={color} onChange={e => { setColor(e.target.value); setSelectedImage(0); }}><option value="">Select color</option>{product.colors.map(item => <option key={item}>{item}</option>)}</select></label>}
         <button className="button full detail-add-button" disabled={!size || (product.colors?.length > 0 && !color) || !sizes.length || adding} onClick={addToCart}>{sizes.length ? (adding ? "Added to cart" : "Add to cart") : "Out of stock"}</button>
         {message && <p className="success-text" role="status">{message}</p>}
-        {!sizes.length && <p className="muted">This product is currently unavailable in all sizes.</p>}
+        {!sizes.length && <p className="muted">{sizeFree ? "This product is currently out of stock." : "This product is currently unavailable in all sizes."}</p>}
       </div>
     </section>
     <section className="related-section">
@@ -207,7 +206,7 @@ function CartPage() {
   };
   return <div className="page narrow"><PageTitle title="Your cart" subtitle="Review your items and complete checkout." />
     {!cart.length ? <div className="empty"><ShoppingBag size={34} /><h3>Your cart is empty</h3><a className="button" href="/">Explore products</a></div> : <>
-      <div className="cart-list">{cart.map(item => <div className="cart-item" key={item.key}><img src={item.image || imageFallback} alt={item.name} onError={e => e.currentTarget.src = imageFallback} /><div className="cart-item-info"><strong>{item.name}</strong><span>{item.gender} · Size {item.size} · {item.color}</span><b>{money(item.price)}</b><div className="inline-controls"><input aria-label="Quantity" type="number" min="1" max="20" value={item.quantity} onChange={e => update(item.key, e.target.value)} /><button className="text-button danger-text" onClick={() => remove(item.key)}>Remove</button></div></div><strong>{money(item.price * item.quantity)}</strong></div>)}</div>
+      <div className="cart-list">{cart.map(item => <div className="cart-item" key={item.key}><img src={item.image || imageFallback} alt={item.name} onError={e => e.currentTarget.src = imageFallback} /><div className="cart-item-info"><strong>{item.name}</strong><span>{item.gender}{!isSizeFreeCategory(item.categoryName) && ` · Size ${item.size}`}{item.color && ` · ${item.color}`}</span><b>{money(item.price)}</b><div className="inline-controls"><input aria-label="Quantity" type="number" min="1" max="20" value={item.quantity} onChange={e => update(item.key, e.target.value)} /><button className="text-button danger-text" onClick={() => remove(item.key)}>Remove</button></div></div><strong>{money(item.price * item.quantity)}</strong></div>)}</div>
       <form className="checkout-card" onSubmit={checkout}><h2>Delivery address</h2><div className="form-grid"><label>Full name<input required value={address.fullName} onChange={e => setAddress({ ...address, fullName: e.target.value })} /></label><label>Phone<input required value={address.phone} onChange={e => setAddress({ ...address, phone: e.target.value })} /></label><label className="span-2">Address line 1<input required value={address.line1} onChange={e => setAddress({ ...address, line1: e.target.value })} /></label><label className="span-2">Address line 2 (optional)<input value={address.line2} onChange={e => setAddress({ ...address, line2: e.target.value })} /></label><label>City<input required value={address.city} onChange={e => setAddress({ ...address, city: e.target.value })} /></label><label>State<input required value={address.state} onChange={e => setAddress({ ...address, state: e.target.value })} /></label><label>PIN code<input required inputMode="numeric" value={address.postalCode} onChange={e => setAddress({ ...address, postalCode: e.target.value })} /></label></div>
         <h2>Payment method</h2><div className="payment-options"><label><input type="radio" checked={payment === "COD"} onChange={() => setPayment("COD")} /> Cash on Delivery</label><label><input type="radio" checked={payment === "RAZORPAY"} onChange={() => setPayment("RAZORPAY")} /> Online payment (Razorpay)</label></div>
         <label>Coupon code (optional)<input value={coupon} onChange={e => setCoupon(e.target.value.toUpperCase())} placeholder="Enter coupon code" /></label>
@@ -302,7 +301,7 @@ function AccountPage() {
               {paginatedOrders.map(o => <tr key={o._id}>
                 <td>{o.orderNumber}</td>
                 <td>{new Date(o.createdAt).toLocaleDateString()}</td>
-                <td>{o.items.map(i => `${i.name} (${i.size}) ×${i.quantity}`).join(", ")}</td>
+                <td>{o.items.map(i => `${i.name}${isSizeFreeCategory(i.categoryName) ? "" : ` (${i.size})`} ×${i.quantity}`).join(", ")}</td>
                 <td>{money(o.total)}</td>
                 <td>{o.paymentMethod}<br /><small>{o.paymentStatus}</small></td>
                 <td><span className={`status ${o.status.toLowerCase().replaceAll(" ", "-")}`}>{o.status}</span>{o.deliveryMessage && <small className="table-subtext">{o.deliveryMessage}</small>}</td>
@@ -328,7 +327,7 @@ function AdminDashboard() {
 function AdminProducts() {
   const { data, loading, error, reload } = useLoad("/products/admin/all");
   const { data: cats } = useLoad("/categories/admin/all");
-  const blank = { name: "", description: "", gender: "Women", category: "", price: "", compareAtPrice: "", images: "", colorVariants: [{ color: "", images: "" }], sizes: "S:0,M:0,L:0", featured: false };
+  const blank = { name: "", description: "", gender: "Women", category: "", price: "", compareAtPrice: "", images: "", colors: "", sizes: "S:0,M:0,L:0", stock: "0", featured: false };
   const [form, setForm] = useState(blank);
   const [editing, setEditing] = useState(null);
   const [modal, setModal] = useState(false);
@@ -336,16 +335,14 @@ function AdminProducts() {
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
-  const openNew = () => { setEditing(null); setForm({ ...blank, colorVariants: [{ color: "", images: "" }], category: cats.find(c => c.gender === "Women")?._id || "" }); setModal(true); };
-  const edit = p => { setEditing(p._id); setForm({ name: p.name, description: p.description || "", gender: p.gender, category: p.category?._id || p.category, price: p.price, compareAtPrice: p.compareAtPrice || "", images: (p.images || []).join(", "), colorVariants: p.colorVariants?.length ? p.colorVariants.map(variant => ({ color: variant.color, images: (variant.images || []).join(", ") })) : (p.colors || []).map(color => ({ color, images: "" })).concat(p.colors?.length ? [] : [{ color: "", images: "" }]), sizes: (p.sizes || []).map(s => `${s.size}:${s.stock}`).join(","), featured: p.featured || false }); setModal(true); };
-  const updateVariant = (index, key, value) => setForm(current => ({ ...current, colorVariants: current.colorVariants.map((variant, i) => i === index ? { ...variant, [key]: value } : variant) }));
+  const openNew = () => { setEditing(null); setForm({ ...blank, category: cats.find(c => c.gender === "Women")?._id || "" }); setModal(true); };
+  const edit = p => { setEditing(p._id); setForm({ name: p.name, description: p.description || "", gender: p.gender, category: p.category?._id || p.category, price: p.price, compareAtPrice: p.compareAtPrice || "", images: (p.images || []).join(", "), colors: (p.colors || []).join(", "), sizes: (p.sizes || []).map(s => `${s.size}:${s.stock}`).join(","), stock: String((p.sizes || []).reduce((total, size) => total + size.stock, 0)), featured: p.featured || false }); setModal(true); };
   const save = async e => {
     e.preventDefault(); setNotice("");
-    if (form.colorVariants.some(variant => !variant.color.trim() && variant.images.trim())) { setNotice("Could not save product. Enter a color name for every color-specific image group."); return; }
-    const sizes = form.sizes.split(",").map(x => { const [size, stock] = x.split(":"); return { size: size?.trim(), stock: Number(stock || 0) }; }).filter(x => x.size);
-    const colorVariants = form.colorVariants.filter(variant => variant.color.trim()).map(variant => ({ color: variant.color.trim(), images: variant.images.split(",").map(image => image.trim()).filter(Boolean) }));
-    const body = { ...form, price: Number(form.price), compareAtPrice: Number(form.compareAtPrice || 0), images: form.images.split(",").map(x => x.trim()).filter(Boolean), colors: colorVariants.map(variant => variant.color), colorVariants, sizes };
-    delete body.sizesText;
+    const sizeFree = isSizeFreeCategory(cats.find(category => category._id === form.category)?.name);
+    const sizes = sizeFree ? [{ size: "One Size", stock: Number(form.stock) || 0 }] : form.sizes.split(",").map(x => { const [size, stock] = x.split(":"); return { size: size?.trim(), stock: Number(stock || 0) }; }).filter(x => x.size);
+    const body = { ...form, price: Number(form.price), compareAtPrice: Number(form.compareAtPrice || 0), images: form.images.split(",").map(x => x.trim()).filter(Boolean), colors: form.colors.split(",").map(x => x.trim()).filter(Boolean), sizes };
+    delete body.stock;
     try { if (editing) await api.put(`/products/${editing}`, body); else await api.post("/products", body); setModal(false); setNotice(editing ? "Product updated." : "Product added."); reload(); } catch (e) { setNotice(e.response?.data?.message || "Could not save product."); }
   };
   const remove = async id => { if (!confirm("Remove this product from the storefront? Historical order details will be preserved.")) return; try { await api.delete(`/products/${id}`); setNotice("Product removed from storefront."); reload(); } catch (e) { setNotice(e.response?.data?.message || "Could not remove product."); } };
@@ -359,17 +356,15 @@ function AdminProducts() {
 
   return <div><PageTitle title="Product Management" subtitle="Add and manage clothing products." action={<button className="button" onClick={openNew}><Plus size={17} /> Add product</button>} />{notice && <Notice message={notice} type={notice.startsWith("Could") ? "error" : "success"} />}{error && <Notice message={error} type="error" />}
     <div className="toolbar"><div className="search-box"><Search size={17} /><input placeholder="Search products…" value={search} onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} /></div><span className="muted">{filtered.length} products</span></div>
-    {loading ? <p>Loading…</p> : <><div className="table-wrap panel"><table><thead><tr><th>Product</th><th>Gender / Category</th><th>Price</th><th>Sizes & stock</th><th>Actions</th></tr></thead><tbody>{paginatedProducts.map(p => <tr key={p._id}><td><div className="table-product"><img src={p.images?.[0] || imageFallback} onError={e => e.currentTarget.src = imageFallback} alt={p.name} /><div><strong>{p.name}</strong><small>{p.isActive ? "Active" : "Archived"}</small></div></div></td><td>{p.gender} / {p.categoryName}</td><td>{money(p.price)}</td><td>{(p.sizes || []).map(s => `${s.size}: ${s.stock}`).join(" · ")}</td><td><div className="action-row"><button className="icon-button" title="Edit" onClick={() => edit(p)}><Pencil size={16} /></button><button className="icon-button danger" title="Remove" onClick={() => remove(p._id)}><Trash2 size={16} /></button></div></td></tr>)}</tbody></table></div><Pagination currentPage={currentPage} totalItems={filtered.length} pageSize={pageSize} onPageChange={setCurrentPage} /></>}
+    {loading ? <p>Loading…</p> : <><div className="table-wrap panel"><table><thead><tr><th>Product</th><th>Gender / Category</th><th>Price</th><th>Sizes & stock</th><th>Actions</th></tr></thead><tbody>{paginatedProducts.map(p => <tr key={p._id}><td><div className="table-product"><img src={p.images?.[0] || imageFallback} onError={e => e.currentTarget.src = imageFallback} alt={p.name} /><div><strong>{p.name}</strong><small>{p.isActive ? "Active" : "Archived"}</small></div></div></td><td>{p.gender} / {p.categoryName}</td><td>{money(p.price)}</td><td>{isSizeFreeCategory(p.categoryName) ? `Stock: ${(p.sizes || []).reduce((total, size) => total + size.stock, 0)}` : (p.sizes || []).map(s => `${s.size}: ${s.stock}`).join(" · ")}</td><td><div className="action-row"><button className="icon-button" title="Edit" onClick={() => edit(p)}><Pencil size={16} /></button><button className="icon-button danger" title="Remove" onClick={() => remove(p._id)}><Trash2 size={16} /></button></div></td></tr>)}</tbody></table></div><Pagination currentPage={currentPage} totalItems={filtered.length} pageSize={pageSize} onPageChange={setCurrentPage} /></>}
     {modal && <Modal title={editing ? "Edit product" : "Add product"} onClose={() => setModal(false)}><form onSubmit={save} className="form-grid">
       <label>Product name<input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></label><label>Gender<select value={form.gender} onChange={e => { const gender = e.target.value; setForm({ ...form, gender, category: cats.find(c => c.gender === gender)?._id || "" }); }}>{["Women", "Men"].map(x => <option key={x}>{x}</option>)}</select></label>
-      <label>Category<select required value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}><option value="">Select category</option>{cats.filter(c => c.gender === form.gender).map(c => <option key={c._id} value={c._id}>{c.name}</option>)}</select></label>
+      <label>Category<select required value={form.category} onChange={e => { const nextCategory = cats.find(category => category._id === e.target.value); setForm(current => ({ ...current, category: e.target.value, stock: isSizeFreeCategory(nextCategory?.name) ? String(stockFromSizeText(current.sizes)) : current.stock })); }}><option value="">Select category</option>{cats.filter(c => c.gender === form.gender).map(c => <option key={c._id} value={c._id}>{c.name}</option>)}</select></label>
       <label>Price (INR)<input required min="0" type="number" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} /></label>
       <label>Compare-at price<input min="0" type="number" value={form.compareAtPrice} onChange={e => setForm({ ...form, compareAtPrice: e.target.value })} /></label>
       <label className="span-2">Shared image URLs (optional, comma separated)<input value={form.images} onChange={e => setForm({ ...form, images: e.target.value })} placeholder="https://…" /></label>
-      <div className="variant-editor span-2"><div className="split"><div><strong>Color variants</strong><small>Add each color and its image URLs. Customers see these images when they select a color.</small></div><button type="button" className="button secondary small" onClick={() => setForm(current => ({ ...current, colorVariants: [...current.colorVariants, { color: "", images: "" }] }))}><Plus size={15} /> Add color</button></div>
-        {form.colorVariants.map((variant, index) => <div className="variant-row" key={index}><label>Color name<input value={variant.color} onChange={e => updateVariant(index, "color", e.target.value)} placeholder="e.g. Black" /></label><label>Image URLs for this color<input value={variant.images} onChange={e => updateVariant(index, "images", e.target.value)} placeholder="https://… (comma separated)" /></label><button type="button" className="icon-button danger" title="Remove color" aria-label="Remove color" disabled={form.colorVariants.length === 1} onClick={() => setForm(current => ({ ...current, colorVariants: current.colorVariants.filter((_, i) => i !== index) }))}><Trash2 size={16} /></button></div>)}
-      </div>
-      <label className="span-2">Sizes and stock (comma separated, SIZE:QTY)<input required value={form.sizes} onChange={e => setForm({ ...form, sizes: e.target.value })} placeholder="S:5,M:10,L:8 or 30:5,32:8" /></label>
+      <label>Colors (comma separated)<input value={form.colors} onChange={e => setForm({ ...form, colors: e.target.value })} placeholder="Black, Blue" /></label>
+      {isSizeFreeCategory(cats.find(category => category._id === form.category)?.name) ? <label>Stock quantity<input required min="0" type="number" value={form.stock} onChange={e => setForm({ ...form, stock: e.target.value })} /></label> : <label className="span-2">Sizes and stock (comma separated, SIZE:QTY)<input required value={form.sizes} onChange={e => setForm({ ...form, sizes: e.target.value })} placeholder="S:5,M:10,L:8 or 30:5,32:8" /></label>}
       <label className="span-2">Description<textarea rows="3" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></label>
       <label className="checkbox-label span-2"><input type="checkbox" checked={form.featured} onChange={e => setForm({ ...form, featured: e.target.checked })} /> Featured product</label>
       <div className="form-actions span-2"><button type="button" className="button secondary" onClick={() => setModal(false)}>Cancel</button><button className="button">{editing ? "Save changes" : "Add product"}</button></div>
@@ -411,7 +406,7 @@ function AdminOrders() {
   const update = async (o, status) => { try { await api.patch(`/orders/${o._id}/status`, { status }); setNotice(`Order ${o.orderNumber} updated.`); reload(); } catch (e) { setNotice(e.response?.data?.message || "Could not update order."); } };
   const cancel = async o => { if (!confirm("Cancel this order?")) return; try { await api.patch(`/orders/${o._id}/cancel`, { reason: "Cancelled by admin" }); setNotice("Order cancelled."); reload(); } catch (e) { setNotice(e.response?.data?.message || "Could not cancel order."); } };
   return <div><PageTitle title="Order Management" subtitle="Review orders and update fulfilment status." />{notice && <Notice message={notice} type={notice.startsWith("Could") ? "error" : "success"} />}{error && <Notice message={error} type="error" />}
-    <div className="table-wrap panel"><table><thead><tr><th>Order</th><th>Customer</th><th>Items / Address</th><th>Total / Payment</th><th>Status</th><th>Update</th></tr></thead><tbody>{loading ? <tr><td colSpan="6">Loading…</td></tr> : paginatedOrders.map(o => <tr key={o._id}><td><strong>{o.orderNumber}</strong><small>{new Date(o.createdAt).toLocaleString()}</small></td><td>{o.customer?.name}<small>{o.customer?.email}</small></td><td>{o.items.map(i => `${i.name} (${i.size}) ×${i.quantity}`).join(", ")}<small>{o.shippingAddress?.fullName}, {o.shippingAddress?.line1}, {o.shippingAddress?.city}, {o.shippingAddress?.postalCode}</small></td><td>{money(o.total)}<small>{o.paymentMethod} · {o.paymentStatus}</small></td><td><span className="status">{o.status}</span></td><td>{o.status !== "Cancelled" && o.status !== "Delivered" ? <><select value={o.status} onChange={e => update(o, e.target.value)}>{["Pending", "Confirmed", "Processing", "Packed", "Shipped", "Out for Delivery", "Delivered"].map(s => <option key={s}>{s}</option>)}</select><button className="text-button danger-text" onClick={() => cancel(o)}>Cancel</button></> : "—"}</td></tr>)}</tbody></table></div>
+    <div className="table-wrap panel"><table><thead><tr><th>Order</th><th>Customer</th><th>Items / Address</th><th>Total / Payment</th><th>Status</th><th>Update</th></tr></thead><tbody>{loading ? <tr><td colSpan="6">Loading…</td></tr> : paginatedOrders.map(o => <tr key={o._id}><td><strong>{o.orderNumber}</strong><small>{new Date(o.createdAt).toLocaleString()}</small></td><td>{o.customer?.name}<small>{o.customer?.email}</small></td><td>{o.items.map(i => `${i.name}${isSizeFreeCategory(i.categoryName) ? "" : ` (${i.size})`} ×${i.quantity}`).join(", ")}<small>{o.shippingAddress?.fullName}, {o.shippingAddress?.line1}, {o.shippingAddress?.city}, {o.shippingAddress?.postalCode}</small></td><td>{money(o.total)}<small>{o.paymentMethod} · {o.paymentStatus}</small></td><td><span className="status">{o.status}</span></td><td>{o.status !== "Cancelled" && o.status !== "Delivered" ? <><select value={o.status} onChange={e => update(o, e.target.value)}>{["Pending", "Confirmed", "Processing", "Packed", "Shipped", "Out for Delivery", "Delivered"].map(s => <option key={s}>{s}</option>)}</select><button className="text-button danger-text" onClick={() => cancel(o)}>Cancel</button></> : "—"}</td></tr>)}</tbody></table></div>
     {!loading && <Pagination currentPage={currentPage} totalItems={data.length} pageSize={pageSize} onPageChange={setCurrentPage} />}
   </div>;
 }
@@ -422,18 +417,20 @@ function AdminInventory() {
   const [notice, setNotice] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
-  const inventoryRows = data.filter(p => p.isActive).flatMap(p => (p.sizes || []).map(s => ({ product: p, size: s, key: `${p._id}-${s.size}` })));
+  const inventoryRows = data.filter(p => p.isActive).flatMap(p => isSizeFreeCategory(p.categoryName)
+    ? [{ product: p, size: { size: "One Size", stock: (p.sizes || []).reduce((total, item) => total + item.stock, 0) }, key: `${p._id}-stock` }]
+    : (p.sizes || []).map(s => ({ product: p, size: s, key: `${p._id}-${s.size}` })));
   const totalPages = Math.ceil(inventoryRows.length / pageSize);
   const paginatedRows = inventoryRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   useEffect(() => { setCurrentPage(page => Math.min(page, Math.max(1, totalPages))); }, [totalPages]);
-  const update = async (p, size, stock) => { const sizes = p.sizes.map(s => s.size === size ? { ...s, stock: Number(stock) } : s); try { await api.put(`/products/${p._id}`, { sizes }); setNotice("Stock updated."); reload(); } catch (e) { setNotice(e.response?.data?.message || "Could not update stock."); } };
-  return <div><PageTitle title="Inventory / Stock" subtitle="Update stock by product size." />{notice && <Notice message={notice} type="error" />}{error && <Notice message={error} type="error" />}
-    <div className="table-wrap panel"><table><thead><tr><th>Product</th><th>Gender</th><th>Size</th><th>Available stock</th><th>Save</th></tr></thead><tbody>{loading ? <tr><td colSpan="5">Loading…</td></tr> : paginatedRows.map(row => <InventoryRow key={row.key} product={row.product} size={row.size} onSave={update} />)}</tbody></table></div>
+  const update = async (p, size, stock) => { const sizes = isSizeFreeCategory(p.categoryName) ? [{ size: "One Size", stock: Number(stock) }] : p.sizes.map(s => s.size === size ? { ...s, stock: Number(stock) } : s); try { await api.put(`/products/${p._id}`, { sizes }); setNotice("Stock updated."); reload(); } catch (e) { setNotice(e.response?.data?.message || "Could not update stock."); } };
+  return <div><PageTitle title="Inventory / Stock" subtitle="Update stock by product size or item." />{notice && <Notice message={notice} type="error" />}{error && <Notice message={error} type="error" />}
+    <div className="table-wrap panel"><table><thead><tr><th>Product</th><th>Gender</th><th>Size / unit</th><th>Available stock</th><th>Save</th></tr></thead><tbody>{loading ? <tr><td colSpan="5">Loading…</td></tr> : paginatedRows.map(row => <InventoryRow key={row.key} product={row.product} size={row.size} onSave={update} />)}</tbody></table></div>
     {!loading && <Pagination currentPage={currentPage} totalItems={inventoryRows.length} pageSize={pageSize} onPageChange={setCurrentPage} />}
   </div>;
 }
 
-function InventoryRow({ product, size, onSave }) { const [stock, setStock] = useState(size.stock); useEffect(() => setStock(size.stock), [size.stock]); return <tr><td>{product.name}</td><td>{product.gender}</td><td>{size.size}</td><td><input className="stock-input" type="number" min="0" value={stock} onChange={e => setStock(e.target.value)} /></td><td><button className="button small" onClick={() => onSave(product, size.size, stock)}>Update</button></td></tr>; }
+function InventoryRow({ product, size, onSave }) { const [stock, setStock] = useState(size.stock); useEffect(() => setStock(size.stock), [size.stock]); return <tr><td>{product.name}</td><td>{product.gender}</td><td>{isSizeFreeCategory(product.categoryName) ? "—" : size.size}</td><td><input className="stock-input" type="number" min="0" value={stock} onChange={e => setStock(e.target.value)} /></td><td><button className="button small" onClick={() => onSave(product, size.size, stock)}>Update</button></td></tr>; }
 
 
 function AdminCustomers() {

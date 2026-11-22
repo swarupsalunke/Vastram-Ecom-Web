@@ -2,12 +2,9 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { useAuth } from "./AuthContext";
 import api from "../api";
 const CartContext = createContext(null);
-function imageForColor(product, color) {
-  return product.colorVariants?.find(variant => variant.color === color)?.images?.[0] || product.images?.[0] || "";
-}
 function toCartItem(item) {
   const product = item.product || item;
-  return { key: `${product._id}-${item.size}-${item.color || ""}`, productId: product._id, name: product.name, price: product.price, image: imageForColor(product, item.color), gender: product.gender, size: item.size, color: item.color || "", quantity: item.quantity };
+  return { key: `${product._id}-${item.size}-${item.color || ""}`, productId: product._id, name: product.name, price: product.price, image: product.images?.[0] || "", gender: product.gender, categoryName: product.categoryName, size: item.size, color: item.color || "", quantity: item.quantity };
 }
 export function CartProvider({ children }) {
   const { user, loading: authLoading } = useAuth();
@@ -33,7 +30,7 @@ export function CartProvider({ children }) {
     const key = `${product._id}-${size}-${color}`;
     const found = cart.find(x => x.key === key);
     const next = found ? cart.map(x => x.key === key ? { ...x, quantity: Math.min(20, x.quantity + 1) } : x)
-      : [...cart, { key, productId: product._id, name: product.name, price: product.price, image: imageForColor(product, color), gender: product.gender, size, color, quantity: 1 }];
+      : [...cart, { key, productId: product._id, name: product.name, price: product.price, image: product.images?.[0] || "", gender: product.gender, categoryName: product.categoryName, size, color, quantity: 1 }];
     setCart(next); saveForUser(next);
   };
   const update = (key, quantity) => {
