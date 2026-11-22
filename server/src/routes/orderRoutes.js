@@ -51,7 +51,7 @@ router.post("/", protect, async (req, res, next) => {
     const total = Math.max(0, Math.round((subtotal - discount) * 100) / 100);
     const orderData = {
       orderNumber: orderNumber(), customer: req.user._id,
-      items: resolved.map(({ product, qty, size }) => ({ product: product._id, name: product.name, image: product.images[0] || "", gender: product.gender, categoryName: product.categoryName, requiresSize: product.requiresSize ?? !/^sarees?$/i.test(String(product.categoryName || "").trim()), size, quantity: qty, unitPrice: product.price })),
+      items: resolved.map(({ product, qty, size }) => ({ product: product._id, name: product.name, image: product.images[0] || "", gender: product.gender, categoryName: product.categoryName, subcategory: product.subcategory || "", requiresSize: product.requiresSize ?? !/^sarees?$/i.test(String(product.categoryName || "").trim()), size, quantity: qty, unitPrice: product.price })),
       shippingAddress, subtotal, discount, total, couponCode: normalizedCoupon,
       paymentMethod, paymentStatus: paymentMethod === "COD" ? "Pending" : "Pending",
       status: "Pending"

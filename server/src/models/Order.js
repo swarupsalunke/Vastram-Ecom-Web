@@ -5,6 +5,7 @@ const orderItemSchema = new mongoose.Schema({
   image: String,
   gender: String,
   categoryName: String,
+  subcategory: String,
   requiresSize: Boolean,
   size: String,
   quantity: { type: Number, min: 1 },

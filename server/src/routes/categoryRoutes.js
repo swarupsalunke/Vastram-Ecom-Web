@@ -18,9 +18,11 @@ router.post("/", protect, adminOnly, async (req, res, next) => {
     const name = String(req.body.name || "").trim();
     const gender = req.body.gender;
     if (!name || !["Men", "Women"].includes(gender)) return res.status(400).json({ message: "Category name and gender are required." });
+    const subcategoryResult = normalizeSubcategories(req.body.subcategories || []);
+    if (subcategoryResult.error) return res.status(400).json({ message: subcategoryResult.error });
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     const requiresSize = typeof req.body.requiresSize === "boolean" ? req.body.requiresSize : !isSizeFreeCategory(name);
-    const category = await Category.create({ name, gender, slug, requiresSize });
+    const category = await Category.create({ name, gender, slug, subcategories: subcategoryResult.values, requiresSize });
     res.status(201).json(category);
   } catch (e) { if (e.code === 11000) return res.status(409).json({ message: "This category already exists for that gender." }); next(e); }
 });
@@ -34,6 +36,16 @@ router.put("/:id", protect, adminOnly, async (req, res, next) => {
       updates.slug = updates.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     }
     if (req.body.gender !== undefined) updates.gender = req.body.gender;
+    if (req.body.subcategories !== undefined) {
+      const subcategoryResult = normalizeSubcategories(req.body.subcategories);
+      if (subcategoryResult.error) return res.status(400).json({ message: subcategoryResult.error });
+      const inUse = await Product.exists({
+        category: existing._id,
+        subcategory: { $exists: true, $nin: subcategoryResult.values, $ne: "" }
+      });
+      if (inUse) return res.status(409).json({ message: "Move products out of removed subcategories before removing them." });
+      updates.subcategories = subcategoryResult.values;
+    }
     updates.requiresSize = typeof req.body.requiresSize === "boolean"
       ? req.body.requiresSize
       : existing.requiresSize ?? !isSizeFreeCategory(updates.name || existing.name);
@@ -67,5 +79,21 @@ router.delete("/:id", protect, adminOnly, async (req, res, next) => {
 });
 function isSizeFreeCategory(name) {
   return /^sarees?$/i.test(String(name || "").trim());
+}
+function normalizeSubcategories(value) {
+  if (!Array.isArray(value)) return { values: [], error: "Subcategories must be a list." };
+  if (value.length > 30) return { values: [], error: "A category can have up to 30 subcategories." };
+  const values = [];
+  const seen = new Set();
+  for (const entry of value) {
+    if (typeof entry !== "string") return { values: [], error: "Subcategory names must be text." };
+    const name = entry.trim();
+    if (!name || name.length > 60) return { values: [], error: "Subcategory names must contain 1 to 60 characters." };
+    const key = name.toLowerCase();
+    if (seen.has(key)) return { values: [], error: `Subcategory ${name} is listed more than once.` };
+    seen.add(key);
+    values.push(name);
+  }
+  return { values, error: "" };
 }
 export default router;

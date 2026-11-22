@@ -13,6 +13,7 @@ router.get("/", async (req, res, next) => {
       if (cat) q.category = cat._id;
       else if (/^[a-f\d]{24}$/i.test(req.query.category)) return res.json([]);
     }
+    if (req.query.subcategory) q.subcategory = String(req.query.subcategory).trim();
     if (req.query.size) q.sizes = { $elemMatch: { size: req.query.size, stock: { $gt: 0 } } };
     if (req.query.available === "true") q.sizes = { $elemMatch: { stock: { $gt: 0 } } };
     if (req.query.minPrice || req.query.maxPrice) q.price = { ...(req.query.minPrice ? { $gte: Number(req.query.minPrice) } : {}), ...(req.query.maxPrice ? { $lte: Number(req.query.maxPrice) } : {}) };
@@ -40,10 +41,12 @@ router.post("/", protect, adminOnly, async (req, res, next) => {
     const cat = await Category.findById(category);
     if (!cat || cat.gender !== gender) return res.status(400).json({ message: "Choose a category matching the selected gender." });
     if (!name?.trim() || !Number.isFinite(Number(price)) || Number(price) < 0) return res.status(400).json({ message: "Valid product name and price are required." });
+    const subcategoryResult = normalizeSubcategory(cat, req.body.subcategory);
+    if (subcategoryResult.error) return res.status(400).json({ message: subcategoryResult.error });
     const normalizedSizes = normalizeSizes(sizes);
     if (normalizedSizes.error) return res.status(400).json({ message: normalizedSizes.error });
     const requiresSize = categoryRequiresSize(cat);
-    const product = await Product.create({ ...req.body, name: name.trim(), category: cat._id, categoryName: cat.name, requiresSize, price: Number(price), sizes: normalizeProductSizes(normalizedSizes.sizes, requiresSize), images: normalizeStrings(images) });
+    const product = await Product.create({ ...req.body, name: name.trim(), category: cat._id, categoryName: cat.name, subcategory: subcategoryResult.value, requiresSize, price: Number(price), sizes: normalizeProductSizes(normalizedSizes.sizes, requiresSize), images: normalizeStrings(images) });
     res.status(201).json(product);
   } catch (e) { next(e); }
 });
@@ -53,15 +56,18 @@ router.put("/:id", protect, adminOnly, async (req, res, next) => {
     delete updates._id; delete updates.__v;
     delete updates.requiresSize;
     let current;
-    if (updates.category || updates.gender || updates.sizes !== undefined) {
+    if (updates.category || updates.gender || updates.sizes !== undefined || updates.subcategory !== undefined) {
       current = await Product.findById(req.params.id);
       if (!current) return res.status(404).json({ message: "Product not found." });
     }
-    if (updates.category || updates.gender) {
+    if (updates.category || updates.gender || updates.subcategory !== undefined) {
       const cat = await Category.findById(updates.category || current.category);
       const gender = updates.gender || current.gender;
       if (!cat || cat.gender !== gender) return res.status(400).json({ message: "Category must match product gender." });
       updates.category = cat._id; updates.categoryName = cat.name; updates.requiresSize = categoryRequiresSize(cat);
+      const subcategoryResult = normalizeSubcategory(cat, updates.subcategory !== undefined ? updates.subcategory : current.subcategory);
+      if (subcategoryResult.error) return res.status(400).json({ message: subcategoryResult.error });
+      updates.subcategory = subcategoryResult.value;
     }
     if (updates.sizes !== undefined) {
       const normalizedSizes = normalizeSizes(updates.sizes);
@@ -111,6 +117,14 @@ function normalizeProductSizes(sizes, requiresSize) {
 }
 function categoryRequiresSize(category) {
   return typeof category.requiresSize === "boolean" ? category.requiresSize : !isSizeFreeCategory(category.name);
+}
+function normalizeSubcategory(category, value) {
+  const subcategory = String(value || "").trim();
+  if (!subcategory) return { value: "", error: "" };
+  const matchingOption = (category.subcategories || []).find(option => option.toLowerCase() === subcategory.toLowerCase());
+  return matchingOption
+    ? { value: matchingOption, error: "" }
+    : { value: "", error: "Choose a subcategory from the selected category." };
 }
 function isSizeFreeCategory(name) {
   return /^sarees?$/i.test(String(name || "").trim());

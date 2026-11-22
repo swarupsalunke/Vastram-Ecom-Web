@@ -5,6 +5,7 @@ const productSchema = new mongoose.Schema({
   gender: { type: String, enum: ["Men", "Women"], required: true },
   category: { type: mongoose.Schema.Types.ObjectId, ref: "Category", required: true },
   categoryName: { type: String, required: true },
+  subcategory: { type: String, trim: true, default: "" },
   requiresSize: { type: Boolean },
   price: { type: Number, required: true, min: 0 },
   compareAtPrice: { type: Number, default: 0, min: 0 },
