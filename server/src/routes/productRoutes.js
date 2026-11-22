@@ -37,12 +37,11 @@ router.get("/:id", async (req, res, next) => {
 });
 router.post("/", protect, adminOnly, async (req, res, next) => {
   try {
-    const { name, gender, category, price, sizes = [], colors = [], colorVariants = [], images = [] } = req.body;
+    const { name, gender, category, price, sizes = [], colors = [], images = [] } = req.body;
     const cat = await Category.findById(category);
     if (!cat || cat.gender !== gender) return res.status(400).json({ message: "Choose a category matching the selected gender." });
     if (!name?.trim() || !Number.isFinite(Number(price)) || Number(price) < 0) return res.status(400).json({ message: "Valid product name and price are required." });
-    const normalizedVariants = normalizeColorVariants(colorVariants);
-    const product = await Product.create({ ...req.body, name: name.trim(), category: cat._id, categoryName: cat.name, price: Number(price), sizes: normalizeSizes(sizes), colors: normalizedVariants.length ? normalizedVariants.map(variant => variant.color) : normalizeStrings(colors), colorVariants: normalizedVariants, images: normalizeStrings(images) });
+    const product = await Product.create({ ...req.body, name: name.trim(), category: cat._id, categoryName: cat.name, price: Number(price), sizes: normalizeProductSizes(sizes, cat.name), colors: normalizeStrings(colors), images: normalizeStrings(images) });
     res.status(201).json(product);
   } catch (e) { next(e); }
 });
@@ -50,19 +49,19 @@ router.put("/:id", protect, adminOnly, async (req, res, next) => {
   try {
     const updates = { ...req.body };
     delete updates._id; delete updates.__v;
-    if (updates.category || updates.gender) {
-      const current = await Product.findById(req.params.id);
+    let current;
+    if (updates.category || updates.gender || updates.sizes) {
+      current = await Product.findById(req.params.id);
       if (!current) return res.status(404).json({ message: "Product not found." });
+    }
+    if (updates.category || updates.gender) {
       const cat = await Category.findById(updates.category || current.category);
       const gender = updates.gender || current.gender;
       if (!cat || cat.gender !== gender) return res.status(400).json({ message: "Category must match product gender." });
       updates.category = cat._id; updates.categoryName = cat.name;
     }
-    if (updates.sizes) updates.sizes = normalizeSizes(updates.sizes);
-    if (updates.colorVariants) {
-      updates.colorVariants = normalizeColorVariants(updates.colorVariants);
-      updates.colors = updates.colorVariants.map(variant => variant.color);
-    } else if (updates.colors) updates.colors = normalizeStrings(updates.colors);
+    if (updates.sizes) updates.sizes = normalizeProductSizes(updates.sizes, updates.categoryName || current.categoryName);
+    if (updates.colors) updates.colors = normalizeStrings(updates.colors);
     if (updates.images) updates.images = normalizeStrings(updates.images);
     const product = await Product.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true }).populate("category", "name gender");
     if (!product) return res.status(404).json({ message: "Product not found." });
@@ -85,18 +84,9 @@ function normalizeSizes(value) {
   if (!Array.isArray(value)) return [];
   return value.map(s => ({ size: String(s.size || "").trim(), stock: Math.max(0, Math.floor(Number(s.stock) || 0)) })).filter(s => s.size).slice(0, 30);
 }
-function normalizeColorVariants(value) {
-  if (!Array.isArray(value)) return [];
-  const variants = new Map();
-  for (const item of value) {
-    const color = String(item.color || "").trim();
-    if (!color) continue;
-    const key = color.toLowerCase();
-    const existing = variants.get(key);
-    const images = normalizeStrings(item.images);
-    variants.set(key, { color: existing?.color || color, images: normalizeStrings([...(existing?.images || []), ...images]) });
-    if (variants.size >= 30) break;
-  }
-  return [...variants.values()];
+function normalizeProductSizes(value, categoryName) {
+  const sizes = normalizeSizes(value);
+  if (!/^sarees?$/i.test(String(categoryName || "").trim())) return sizes;
+  return [{ size: "One Size", stock: sizes.reduce((total, item) => total + item.stock, 0) }];
 }
 export default router;
