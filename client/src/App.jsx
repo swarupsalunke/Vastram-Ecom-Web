@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useAuth } from "./context/AuthContext";
 import Layout from "./components/Layout";
@@ -14,7 +14,7 @@ import TermsConditions from "./pages/TermsConditions";
 import ShippingPolicy from "./pages/ShippingPolicy";
 import ReturnPolicy from "./pages/ReturnPolicy";
 import RefundPolicy from "./pages/RefundPolicy";
-import { Search, SlidersHorizontal, Plus, Pencil, Trash2, Package, ShoppingBag, Users, IndianRupee, X, Warehouse, Eye, CheckCircle, Clock, Truck, MessageSquare, TicketPercent } from "lucide-react";
+import { Search, SlidersHorizontal, Plus, Pencil, Trash2, Package, ShoppingBag, Users, IndianRupee, X, Warehouse, Eye, CheckCircle, Clock, Truck, MessageSquare, TicketPercent, ArrowLeft } from "lucide-react";
 
 const money = n => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(Number(n || 0));
 const imageFallback = "https://placehold.co/600x750/f6f6f6/777?text=Vastram";
@@ -30,7 +30,6 @@ function Home() {
   const [params, setParams] = useSearchParams();
   const [filters, setFilters] = useState({ gender: params.get("gender") || "", category: params.get("category") || "", size: params.get("size") || "", color: params.get("color") || "", minPrice: params.get("minPrice") || "", maxPrice: params.get("maxPrice") || "", search: params.get("search") || "", sort: params.get("sort") || "" });
   const [categories, setCategories] = useState([]);
-  const [selected, setSelected] = useState({});
   const { add } = useCart();
   const { data: products, loading, error } = useLoad("/products?" + new URLSearchParams(Object.fromEntries(Object.entries(filters).filter(([, v]) => v))), [JSON.stringify(filters)]);
   useEffect(() => { api.get("/categories").then(r => setCategories(r.data)).catch(() => setCategories([])); }, []);
@@ -49,22 +48,111 @@ function Home() {
         <div className="two-input"><label>Min price<input type="number" min="0" value={filters.minPrice} onChange={e => change("minPrice", e.target.value)} placeholder="₹ 0" /></label><label>Max price<input type="number" min="0" value={filters.maxPrice} onChange={e => change("maxPrice", e.target.value)} placeholder="₹ 5000" /></label></div>
         <label>Sort by<select value={filters.sort} onChange={e => change("sort", e.target.value)}><option value="">Newest</option><option value="price-asc">Price: Low to high</option><option value="price-desc">Price: High to low</option></select></label>
       </aside>
-      <section className="product-results">{error && <Notice message={error} type="error" />}{loading ? <p>Loading products…</p> : products.length ? <div className="product-grid">{products.map(p => <ProductCard key={p._id} product={p} onAdd={add} selected={selected} setSelected={setSelected} />)}</div> : <div className="empty"><Package size={32} /><h3>No products found</h3><p>Try changing or resetting your filters.</p></div>}</section>
+        <section className="product-results">{error && <Notice message={error} type="error" />}{loading ? <p>Loading products…</p> : products.length ? <div className="product-grid">{products.map(p => <ProductCard key={p._id} product={p} onAdd={add} />)}</div> : <div className="empty"><Package size={32} /><h3>No products found</h3><p>Try changing or resetting your filters.</p></div>}</section>
     </div>
   </div>;
 }
-function ProductCard({ product, onAdd, selected, setSelected }) {
+function ProductCard({ product, onAdd }) {
   const [message, setMessage] = useState("");
+  const [selection, setSelection] = useState({});
   const sizes = (product.sizes || []).filter(s => s.stock > 0);
-  const size = selected[product._id]?.size || sizes[0]?.size || "";
-  const color = selected[product._id]?.color || product.colors?.[0] || "";
+  const size = selection.size || sizes[0]?.size || "";
+  const color = selection.color ?? product.colors?.[0] ?? "";
   return <article className="product-card">
-    <div className="product-image"><img src={product.images?.[0] || imageFallback} alt={product.name} onError={e => { e.currentTarget.src = imageFallback; }} />{product.featured && <span className="image-tag">FEATURED</span>}</div>
-    <div className="product-info"><div className="product-meta">{product.gender} · {product.categoryName}</div><h3>{product.name}</h3><div className="price-row"><strong>{money(product.price)}</strong>{product.compareAtPrice > product.price && <del>{money(product.compareAtPrice)}</del>}</div>
-      <div className="product-options"><select aria-label="Select size" value={size} onChange={e => setSelected(p => ({ ...p, [product._id]: { ...p[product._id], size: e.target.value } }))}><option value="">Select size</option>{sizes.map(s => <option key={s.size} value={s.size}>{s.size}</option>)}</select><select aria-label="Select color" value={color} onChange={e => setSelected(p => ({ ...p, [product._id]: { ...p[product._id], color: e.target.value } }))}><option value="">Select color</option>{(product.colors || []).map(c => <option key={c}>{c}</option>)}</select></div>
+    <div className="product-image"><Link className="product-image-link" to={`/products/${product._id}`} aria-label={`View ${product.name}`}><img src={product.images?.[0] || imageFallback} alt={product.name} onError={e => { e.currentTarget.src = imageFallback; }} /></Link>{product.featured && <span className="image-tag">FEATURED</span>}</div>
+    <div className="product-info"><div className="product-meta">{product.gender} · {product.categoryName}</div><h3><Link to={`/products/${product._id}`}>{product.name}</Link></h3><div className="price-row"><strong>{money(product.price)}</strong>{product.compareAtPrice > product.price && <del>{money(product.compareAtPrice)}</del>}</div>
+      <div className="product-options"><select aria-label="Select size" value={size} onChange={e => setSelection(p => ({ ...p, size: e.target.value }))}><option value="">Select size</option>{sizes.map(s => <option key={s.size} value={s.size}>{s.size}</option>)}</select><select aria-label="Select color" value={color} onChange={e => setSelection(p => ({ ...p, color: e.target.value }))}><option value="">Select color</option>{(product.colors || []).map(c => <option key={c}>{c}</option>)}</select></div>
       <button className="button full" disabled={!size || (!color && (product.colors || []).length > 0) || !sizes.length} onClick={() => { onAdd(product, size, color); setMessage("Added to cart"); setTimeout(() => setMessage(""), 1600); }}>{sizes.length ? "Add to cart" : "Out of stock"}</button>{message && <small className="success-text">{message}</small>}
     </div>
   </article>;
+}
+
+function ProductDetail() {
+  const { id } = useParams();
+  const { add } = useCart();
+  const [product, setProduct] = useState(null);
+  const [related, setRelated] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [relatedError, setRelatedError] = useState("");
+  const [selectedImage, setSelectedImage] = useState(0);
+  const [size, setSize] = useState("");
+  const [color, setColor] = useState("");
+  const [message, setMessage] = useState("");
+  const [adding, setAdding] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError("");
+    setRelatedError("");
+    setProduct(null);
+    setRelated([]);
+    api.get(`/products/${id}`).then(async ({ data }) => {
+      if (!active) return;
+      setProduct(data);
+      setSelectedImage(0);
+      setSize((data.sizes || []).find(s => s.stock > 0)?.size || "");
+      setColor(data.colors?.[0] || "");
+      const categoryId = data.category?._id || data.category;
+      if (!categoryId) return;
+      try {
+        const { data: products } = await api.get("/products", { params: { category: categoryId, gender: data.gender } });
+        if (active) setRelated(products.filter(item => item._id !== data._id));
+      } catch {
+        if (active) setRelatedError("Related products could not be loaded.");
+      }
+    }).catch(e => {
+      if (active) setError(e.response?.data?.message || "Could not load this product.");
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, [id]);
+
+  if (loading) return <div className="page"><p>Loading product…</p></div>;
+  if (error || !product) return <div className="page"><Notice message={error || "Product not found."} type="error" /><Link className="button secondary" to="/"><ArrowLeft size={16} /> Back to shop</Link></div>;
+
+  const sizes = (product.sizes || []).filter(item => item.stock > 0);
+  const images = product.images?.length ? product.images : [imageFallback];
+  const categoryId = product.category?._id || product.category;
+
+  const addToCart = () => {
+    setAdding(true);
+    add(product, size, color);
+    setMessage("Added to cart.");
+    setTimeout(() => {
+      setMessage("");
+      setAdding(false);
+    }, 1600);
+  };
+
+  return <div className="page">
+    <Link className="back-link" to="/"><ArrowLeft size={16} /> Back to shop</Link>
+    <section className="product-detail">
+      <div className="detail-gallery">
+        <div className="detail-main-image"><img src={images[selectedImage] || imageFallback} alt={product.name} onError={e => { e.currentTarget.src = imageFallback; }} /></div>
+        {images.length > 1 && <div className="detail-thumbnails">{images.map((image, index) => <button key={`${image}-${index}`} className={`detail-thumbnail ${selectedImage === index ? "active" : ""}`} onClick={() => setSelectedImage(index)} aria-label={`View product image ${index + 1}`} aria-pressed={selectedImage === index}><img src={image} alt="" onError={e => { e.currentTarget.src = imageFallback; }} /></button>)}</div>}
+      </div>
+      <div className="detail-info">
+        <div className="product-meta">{product.gender} · {product.categoryName}</div>
+        <h1>{product.name}</h1>
+        <div className="detail-price"><strong>{money(product.price)}</strong>{product.compareAtPrice > product.price && <del>{money(product.compareAtPrice)}</del>}</div>
+        <p className="detail-description">{product.description || "A thoughtfully selected piece from our collection."}</p>
+        <div className="detail-facts"><span>Category</span><strong>{product.categoryName}</strong><span>For</span><strong>{product.gender}</strong></div>
+        <label>Size<select value={size} onChange={e => setSize(e.target.value)}><option value="">Select size</option>{sizes.map(item => <option key={item.size} value={item.size}>{item.size} · {item.stock} available</option>)}</select></label>
+        {product.colors?.length > 0 && <label>Color<select value={color} onChange={e => setColor(e.target.value)}><option value="">Select color</option>{product.colors.map(item => <option key={item}>{item}</option>)}</select></label>}
+        <button className="button full detail-add-button" disabled={!size || (product.colors?.length > 0 && !color) || !sizes.length || adding} onClick={addToCart}>{sizes.length ? (adding ? "Added to cart" : "Add to cart") : "Out of stock"}</button>
+        {message && <p className="success-text" role="status">{message}</p>}
+        {!sizes.length && <p className="muted">This product is currently unavailable in all sizes.</p>}
+      </div>
+    </section>
+    <section className="related-section">
+      <div className="section-heading"><div><span className="eyebrow">MORE TO EXPLORE</span><h2>Related products</h2></div>{categoryId && <Link className="text-button" to={`/?gender=${encodeURIComponent(product.gender)}&category=${encodeURIComponent(categoryId)}#shop`}>Shop {product.categoryName}</Link>}</div>
+      {relatedError && <Notice message={relatedError} type="error" />}
+      {related.length ? <div className="product-grid">{related.map(item => <ProductCard key={item._id} product={item} onAdd={add} />)}</div> : <p className="muted">No other products are available in this category yet.</p>}
+    </section>
+  </div>;
 }
 
 function AuthPage({ mode }) {
@@ -413,6 +501,7 @@ export default function App() {
   const { user } = useAuth();
   return <Layout><Routes>
     <Route path="/" element={user?.role === "admin" ? <Navigate to="/admin/dashboard" replace /> : <Home />} />
+    <Route path="/products/:id" element={<ProductDetail />} />
     <Route path="/login" element={user ? <Navigate to={user.role === "admin" ? "/admin/dashboard" : "/"} replace /> : <AuthPage mode="login" />} />
     <Route path="/register" element={user ? <Navigate to={user.role === "admin" ? "/admin/dashboard" : "/"} replace /> : <AuthPage mode="register" />} />
     <Route path="/cart" element={<Protected><CartPage /></Protected>} />
