@@ -42,7 +42,7 @@ router.post("/", protect, async (req, res, next) => {
     const total = Math.max(0, Math.round((subtotal - discount) * 100) / 100);
     const order = await Order.create({
       orderNumber: orderNumber(), customer: req.user._id,
-      items: resolved.map(({ product, qty, size, color }) => ({ product: product._id, name: product.name, image: product.images[0] || "", gender: product.gender, categoryName: product.categoryName, size, color, quantity: qty, unitPrice: product.price })),
+      items: resolved.map(({ product, qty, size, color }) => ({ product: product._id, name: product.name, image: (product.colorVariants || []).find(variant => variant.color === color)?.images[0] || product.images[0] || "", gender: product.gender, categoryName: product.categoryName, size, color, quantity: qty, unitPrice: product.price })),
       shippingAddress, subtotal, discount, total, couponCode: normalizedCoupon,
       paymentMethod, paymentStatus: paymentMethod === "COD" ? "Pending" : "Pending",
       status: "Pending"

@@ -37,11 +37,12 @@ router.get("/:id", async (req, res, next) => {
 });
 router.post("/", protect, adminOnly, async (req, res, next) => {
   try {
-    const { name, gender, category, price, sizes = [], colors = [], images = [] } = req.body;
+    const { name, gender, category, price, sizes = [], colors = [], colorVariants = [], images = [] } = req.body;
     const cat = await Category.findById(category);
     if (!cat || cat.gender !== gender) return res.status(400).json({ message: "Choose a category matching the selected gender." });
     if (!name?.trim() || !Number.isFinite(Number(price)) || Number(price) < 0) return res.status(400).json({ message: "Valid product name and price are required." });
-    const product = await Product.create({ ...req.body, name: name.trim(), category: cat._id, categoryName: cat.name, price: Number(price), sizes: normalizeSizes(sizes), colors: normalizeStrings(colors), images: normalizeStrings(images) });
+    const normalizedVariants = normalizeColorVariants(colorVariants);
+    const product = await Product.create({ ...req.body, name: name.trim(), category: cat._id, categoryName: cat.name, price: Number(price), sizes: normalizeSizes(sizes), colors: normalizedVariants.length ? normalizedVariants.map(variant => variant.color) : normalizeStrings(colors), colorVariants: normalizedVariants, images: normalizeStrings(images) });
     res.status(201).json(product);
   } catch (e) { next(e); }
 });
@@ -58,7 +59,10 @@ router.put("/:id", protect, adminOnly, async (req, res, next) => {
       updates.category = cat._id; updates.categoryName = cat.name;
     }
     if (updates.sizes) updates.sizes = normalizeSizes(updates.sizes);
-    if (updates.colors) updates.colors = normalizeStrings(updates.colors);
+    if (updates.colorVariants) {
+      updates.colorVariants = normalizeColorVariants(updates.colorVariants);
+      updates.colors = updates.colorVariants.map(variant => variant.color);
+    } else if (updates.colors) updates.colors = normalizeStrings(updates.colors);
     if (updates.images) updates.images = normalizeStrings(updates.images);
     const product = await Product.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true }).populate("category", "name gender");
     if (!product) return res.status(404).json({ message: "Product not found." });
@@ -80,5 +84,19 @@ function normalizeStrings(value) {
 function normalizeSizes(value) {
   if (!Array.isArray(value)) return [];
   return value.map(s => ({ size: String(s.size || "").trim(), stock: Math.max(0, Math.floor(Number(s.stock) || 0)) })).filter(s => s.size).slice(0, 30);
+}
+function normalizeColorVariants(value) {
+  if (!Array.isArray(value)) return [];
+  const variants = new Map();
+  for (const item of value) {
+    const color = String(item.color || "").trim();
+    if (!color) continue;
+    const key = color.toLowerCase();
+    const existing = variants.get(key);
+    const images = normalizeStrings(item.images);
+    variants.set(key, { color: existing?.color || color, images: normalizeStrings([...(existing?.images || []), ...images]) });
+    if (variants.size >= 30) break;
+  }
+  return [...variants.values()];
 }
 export default router;
