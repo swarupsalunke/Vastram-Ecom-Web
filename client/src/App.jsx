@@ -30,13 +30,13 @@ function PageTitle({ title, subtitle, action }) { return <div className="page-ti
 
 function Home() {
   const [params, setParams] = useSearchParams();
-  const [filters, setFilters] = useState({ gender: params.get("gender") || "", category: params.get("category") || "", size: params.get("size") || "", color: params.get("color") || "", minPrice: params.get("minPrice") || "", maxPrice: params.get("maxPrice") || "", search: params.get("search") || "", sort: params.get("sort") || "" });
+  const [filters, setFilters] = useState({ gender: params.get("gender") || "", category: params.get("category") || "", size: params.get("size") || "", minPrice: params.get("minPrice") || "", maxPrice: params.get("maxPrice") || "", search: params.get("search") || "", sort: params.get("sort") || "" });
   const [categories, setCategories] = useState([]);
   const { add } = useCart();
   const { data: products, loading, error } = useLoad("/products?" + new URLSearchParams(Object.fromEntries(Object.entries(filters).filter(([, v]) => v))), [JSON.stringify(filters)]);
   useEffect(() => { api.get("/categories").then(r => setCategories(r.data)).catch(() => setCategories([])); }, []);
   const change = (k, v) => setFilters(p => ({ ...p, [k]: v, ...(k === "gender" ? { category: "" } : {}) }));
-  const clear = () => setFilters({ gender: "", category: "", size: "", color: "", minPrice: "", maxPrice: "", search: "", sort: "" });
+  const clear = () => setFilters({ gender: "", category: "", size: "", minPrice: "", maxPrice: "", search: "", sort: "" });
   return <div className="page">
     <section className="hero"><div><span className="eyebrow">THE NEW SEASON EDIT</span><h1>Find your<br /><em>everyday style.</em></h1><p>Thoughtful essentials for men and women. Discover pieces you’ll reach for again and again.</p><a href="#shop" className="button">Explore collection</a></div><div className="hero-art"><div className="hero-circle"></div><div className="hero-caption">NEW ARRIVALS<br /><strong>STYLE YOUR WAY</strong></div></div></section>
     <div id="shop" className="section-heading"><div><span className="eyebrow">CURATED FOR YOU</span><h2>Shop the collection</h2></div><span className="muted">{products.length} products</span></div>
@@ -46,7 +46,6 @@ function Home() {
         <label>Gender<select value={filters.gender} onChange={e => change("gender", e.target.value)}><option value="">Men & Women</option><option>Men</option><option>Women</option></select></label>
         <label>Category<select value={filters.category} onChange={e => change("category", e.target.value)}><option value="">All categories</option>{categories.filter(c => !filters.gender || c.gender === filters.gender).map(c => <option key={c._id} value={c._id}>{c.gender} · {c.name}</option>)}</select></label>
         <label>Size<input value={filters.size} onChange={e => change("size", e.target.value)} placeholder="e.g. M, 30, Free Size" /></label>
-        <label>Color<input value={filters.color} onChange={e => change("color", e.target.value)} placeholder="e.g. Black" /></label>
         <div className="two-input"><label>Min price<input type="number" min="0" value={filters.minPrice} onChange={e => change("minPrice", e.target.value)} placeholder="₹ 0" /></label><label>Max price<input type="number" min="0" value={filters.maxPrice} onChange={e => change("maxPrice", e.target.value)} placeholder="₹ 5000" /></label></div>
         <label>Sort by<select value={filters.sort} onChange={e => change("sort", e.target.value)}><option value="">Newest</option><option value="price-asc">Price: Low to high</option><option value="price-desc">Price: High to low</option></select></label>
       </aside>
@@ -59,13 +58,12 @@ function ProductCard({ product, onAdd }) {
   const [selection, setSelection] = useState({});
   const sizes = (product.sizes || []).filter(s => s.stock > 0);
   const size = selection.size || sizes[0]?.size || "";
-  const color = selection.color ?? product.colors?.[0] ?? "";
   const sizeFree = isSizeFreeCategory(product.categoryName);
   return <article className="product-card">
     <div className="product-image"><Link className="product-image-link" to={`/products/${product._id}`} aria-label={`View ${product.name}`}><img src={product.images?.[0] || imageFallback} alt={product.name} onError={e => { e.currentTarget.src = imageFallback; }} /></Link>{product.featured && <span className="image-tag">FEATURED</span>}</div>
     <div className="product-info"><div className="product-meta">{product.gender} · {product.categoryName}</div><h3><Link to={`/products/${product._id}`}>{product.name}</Link></h3><div className="price-row"><strong>{money(product.price)}</strong>{product.compareAtPrice > product.price && <del>{money(product.compareAtPrice)}</del>}</div>
-      {(!sizeFree || product.colors?.length > 0) && <div className="product-options">{!sizeFree && <select aria-label="Select size" value={size} onChange={e => setSelection(p => ({ ...p, size: e.target.value }))}><option value="">Select size</option>{sizes.map(s => <option key={s.size} value={s.size}>{s.size}</option>)}</select>}{product.colors?.length > 0 && <select aria-label="Select color" value={color} onChange={e => setSelection(p => ({ ...p, color: e.target.value }))}><option value="">Select color</option>{product.colors.map(c => <option key={c}>{c}</option>)}</select>}</div>}
-      <button className="button full" disabled={!size || (!color && (product.colors || []).length > 0) || !sizes.length} onClick={() => { onAdd(product, size, color); setMessage("Added to cart"); setTimeout(() => setMessage(""), 1600); }}>{sizes.length ? "Add to cart" : "Out of stock"}</button>{message && <small className="success-text">{message}</small>}
+      {!sizeFree && <div className="product-options"><select aria-label="Select size" value={size} onChange={e => setSelection(p => ({ ...p, size: e.target.value }))}><option value="">Select size</option>{sizes.map(s => <option key={s.size} value={s.size}>{s.size}</option>)}</select></div>}
+      <button className="button full" disabled={!size || !sizes.length} onClick={() => { onAdd(product, size); setMessage("Added to cart"); setTimeout(() => setMessage(""), 1600); }}>{sizes.length ? "Add to cart" : "Out of stock"}</button>{message && <small className="success-text">{message}</small>}
     </div>
   </article>;
 }
@@ -80,7 +78,6 @@ function ProductDetail() {
   const [relatedError, setRelatedError] = useState("");
   const [selectedImage, setSelectedImage] = useState(0);
   const [size, setSize] = useState("");
-  const [color, setColor] = useState("");
   const [message, setMessage] = useState("");
   const [adding, setAdding] = useState(false);
 
@@ -96,7 +93,6 @@ function ProductDetail() {
       setProduct(data);
       setSelectedImage(0);
       setSize((data.sizes || []).find(s => s.stock > 0)?.size || "");
-      setColor(data.colors?.[0] || "");
       const categoryId = data.category?._id || data.category;
       if (!categoryId) return;
       try {
@@ -123,7 +119,7 @@ function ProductDetail() {
 
   const addToCart = () => {
     setAdding(true);
-    add(product, size, color);
+    add(product, size);
     setMessage("Added to cart.");
     setTimeout(() => {
       setMessage("");
@@ -145,8 +141,7 @@ function ProductDetail() {
         <p className="detail-description">{product.description || "A thoughtfully selected piece from our collection."}</p>
         <div className="detail-facts"><span>Category</span><strong>{product.categoryName}</strong><span>For</span><strong>{product.gender}</strong></div>
         {!sizeFree && <label>Size<select value={size} onChange={e => setSize(e.target.value)}><option value="">Select size</option>{sizes.map(item => <option key={item.size} value={item.size}>{item.size} · {item.stock} available</option>)}</select></label>}
-        {product.colors?.length > 0 && <label>Color<select value={color} onChange={e => { setColor(e.target.value); setSelectedImage(0); }}><option value="">Select color</option>{product.colors.map(item => <option key={item}>{item}</option>)}</select></label>}
-        <button className="button full detail-add-button" disabled={!size || (product.colors?.length > 0 && !color) || !sizes.length || adding} onClick={addToCart}>{sizes.length ? (adding ? "Added to cart" : "Add to cart") : "Out of stock"}</button>
+        <button className="button full detail-add-button" disabled={!size || !sizes.length || adding} onClick={addToCart}>{sizes.length ? (adding ? "Added to cart" : "Add to cart") : "Out of stock"}</button>
         {message && <p className="success-text" role="status">{message}</p>}
         {!sizes.length && <p className="muted">{sizeFree ? "This product is currently out of stock." : "This product is currently unavailable in all sizes."}</p>}
       </div>
@@ -179,7 +174,7 @@ function CartPage() {
     e.preventDefault(); setMessage(""); setBusy(true);
     try {
       if (!cart.length) throw new Error("Your cart is empty.");
-      const { data } = await api.post("/orders", { items: cart.map(x => ({ productId: x.productId, size: x.size, color: x.color, quantity: x.quantity })), shippingAddress: address, paymentMethod: payment, couponCode: coupon || undefined });
+      const { data } = await api.post("/orders", { items: cart.map(x => ({ productId: x.productId, size: x.size, quantity: x.quantity })), shippingAddress: address, paymentMethod: payment, couponCode: coupon || undefined });
       if (payment === "COD") { clear(); navigate("/account?placed=1"); return; }
       const { data: rp } = await api.post("/payments/razorpay/order", { orderId: data.order._id });
       if (!window.Razorpay) await loadRazorpay();
@@ -206,7 +201,7 @@ function CartPage() {
   };
   return <div className="page narrow"><PageTitle title="Your cart" subtitle="Review your items and complete checkout." />
     {!cart.length ? <div className="empty"><ShoppingBag size={34} /><h3>Your cart is empty</h3><a className="button" href="/">Explore products</a></div> : <>
-      <div className="cart-list">{cart.map(item => <div className="cart-item" key={item.key}><img src={item.image || imageFallback} alt={item.name} onError={e => e.currentTarget.src = imageFallback} /><div className="cart-item-info"><strong>{item.name}</strong><span>{item.gender}{!isSizeFreeCategory(item.categoryName) && ` · Size ${item.size}`}{item.color && ` · ${item.color}`}</span><b>{money(item.price)}</b><div className="inline-controls"><input aria-label="Quantity" type="number" min="1" max="20" value={item.quantity} onChange={e => update(item.key, e.target.value)} /><button className="text-button danger-text" onClick={() => remove(item.key)}>Remove</button></div></div><strong>{money(item.price * item.quantity)}</strong></div>)}</div>
+      <div className="cart-list">{cart.map(item => <div className="cart-item" key={item.key}><img src={item.image || imageFallback} alt={item.name} onError={e => e.currentTarget.src = imageFallback} /><div className="cart-item-info"><strong>{item.name}</strong><span>{item.gender}{!isSizeFreeCategory(item.categoryName) && ` · Size ${item.size}`}</span><b>{money(item.price)}</b><div className="inline-controls"><input aria-label="Quantity" type="number" min="1" max="20" value={item.quantity} onChange={e => update(item.key, e.target.value)} /><button className="text-button danger-text" onClick={() => remove(item.key)}>Remove</button></div></div><strong>{money(item.price * item.quantity)}</strong></div>)}</div>
       <form className="checkout-card" onSubmit={checkout}><h2>Delivery address</h2><div className="form-grid"><label>Full name<input required value={address.fullName} onChange={e => setAddress({ ...address, fullName: e.target.value })} /></label><label>Phone<input required value={address.phone} onChange={e => setAddress({ ...address, phone: e.target.value })} /></label><label className="span-2">Address line 1<input required value={address.line1} onChange={e => setAddress({ ...address, line1: e.target.value })} /></label><label className="span-2">Address line 2 (optional)<input value={address.line2} onChange={e => setAddress({ ...address, line2: e.target.value })} /></label><label>City<input required value={address.city} onChange={e => setAddress({ ...address, city: e.target.value })} /></label><label>State<input required value={address.state} onChange={e => setAddress({ ...address, state: e.target.value })} /></label><label>PIN code<input required inputMode="numeric" value={address.postalCode} onChange={e => setAddress({ ...address, postalCode: e.target.value })} /></label></div>
         <h2>Payment method</h2><div className="payment-options"><label><input type="radio" checked={payment === "COD"} onChange={() => setPayment("COD")} /> Cash on Delivery</label><label><input type="radio" checked={payment === "RAZORPAY"} onChange={() => setPayment("RAZORPAY")} /> Online payment (Razorpay)</label></div>
         <label>Coupon code (optional)<input value={coupon} onChange={e => setCoupon(e.target.value.toUpperCase())} placeholder="Enter coupon code" /></label>
@@ -327,7 +322,7 @@ function AdminDashboard() {
 function AdminProducts() {
   const { data, loading, error, reload } = useLoad("/products/admin/all");
   const { data: cats } = useLoad("/categories/admin/all");
-  const blank = { name: "", description: "", gender: "Women", category: "", price: "", compareAtPrice: "", images: "", colors: "", sizes: "S:0,M:0,L:0", stock: "0", featured: false };
+  const blank = { name: "", description: "", gender: "Women", category: "", price: "", compareAtPrice: "", images: "", sizes: "S:0,M:0,L:0", stock: "0", featured: false };
   const [form, setForm] = useState(blank);
   const [editing, setEditing] = useState(null);
   const [modal, setModal] = useState(false);
@@ -336,12 +331,12 @@ function AdminProducts() {
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
   const openNew = () => { setEditing(null); setForm({ ...blank, category: cats.find(c => c.gender === "Women")?._id || "" }); setModal(true); };
-  const edit = p => { setEditing(p._id); setForm({ name: p.name, description: p.description || "", gender: p.gender, category: p.category?._id || p.category, price: p.price, compareAtPrice: p.compareAtPrice || "", images: (p.images || []).join(", "), colors: (p.colors || []).join(", "), sizes: (p.sizes || []).map(s => `${s.size}:${s.stock}`).join(","), stock: String((p.sizes || []).reduce((total, size) => total + size.stock, 0)), featured: p.featured || false }); setModal(true); };
+  const edit = p => { setEditing(p._id); setForm({ name: p.name, description: p.description || "", gender: p.gender, category: p.category?._id || p.category, price: p.price, compareAtPrice: p.compareAtPrice || "", images: (p.images || []).join(", "), sizes: (p.sizes || []).map(s => `${s.size}:${s.stock}`).join(","), stock: String((p.sizes || []).reduce((total, size) => total + size.stock, 0)), featured: p.featured || false }); setModal(true); };
   const save = async e => {
     e.preventDefault(); setNotice("");
     const sizeFree = isSizeFreeCategory(cats.find(category => category._id === form.category)?.name);
     const sizes = sizeFree ? [{ size: "One Size", stock: Number(form.stock) || 0 }] : form.sizes.split(",").map(x => { const [size, stock] = x.split(":"); return { size: size?.trim(), stock: Number(stock || 0) }; }).filter(x => x.size);
-    const body = { ...form, price: Number(form.price), compareAtPrice: Number(form.compareAtPrice || 0), images: form.images.split(",").map(x => x.trim()).filter(Boolean), colors: form.colors.split(",").map(x => x.trim()).filter(Boolean), sizes };
+    const body = { ...form, price: Number(form.price), compareAtPrice: Number(form.compareAtPrice || 0), images: form.images.split(",").map(x => x.trim()).filter(Boolean), sizes };
     delete body.stock;
     try { if (editing) await api.put(`/products/${editing}`, body); else await api.post("/products", body); setModal(false); setNotice(editing ? "Product updated." : "Product added."); reload(); } catch (e) { setNotice(e.response?.data?.message || "Could not save product."); }
   };
@@ -363,7 +358,6 @@ function AdminProducts() {
       <label>Price (INR)<input required min="0" type="number" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} /></label>
       <label>Compare-at price<input min="0" type="number" value={form.compareAtPrice} onChange={e => setForm({ ...form, compareAtPrice: e.target.value })} /></label>
       <label className="span-2">Shared image URLs (optional, comma separated)<input value={form.images} onChange={e => setForm({ ...form, images: e.target.value })} placeholder="https://…" /></label>
-      <label>Colors (comma separated)<input value={form.colors} onChange={e => setForm({ ...form, colors: e.target.value })} placeholder="Black, Blue" /></label>
       {isSizeFreeCategory(cats.find(category => category._id === form.category)?.name) ? <label>Stock quantity<input required min="0" type="number" value={form.stock} onChange={e => setForm({ ...form, stock: e.target.value })} /></label> : <label className="span-2">Sizes and stock (comma separated, SIZE:QTY)<input required value={form.sizes} onChange={e => setForm({ ...form, sizes: e.target.value })} placeholder="S:5,M:10,L:8 or 30:5,32:8" /></label>}
       <label className="span-2">Description<textarea rows="3" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></label>
       <label className="checkbox-label span-2"><input type="checkbox" checked={form.featured} onChange={e => setForm({ ...form, featured: e.target.checked })} /> Featured product</label>
