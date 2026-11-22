@@ -18,6 +18,10 @@ import { Search, SlidersHorizontal, Plus, Pencil, Trash2, Package, ShoppingBag, 
 
 const money = n => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(Number(n || 0));
 const imageFallback = "https://placehold.co/600x750/f6f6f6/777?text=Vastram";
+function imagesForColor(product, color) {
+  const variant = product.colorVariants?.find(item => item.color === color);
+  return variant?.images?.length ? variant.images : product.images?.length ? product.images : [imageFallback];
+}
 function useLoad(url, deps = []) {
   const [data, setData] = useState([]); const [loading, setLoading] = useState(true); const [error, setError] = useState("");
   const reload = async () => { setLoading(true); setError(""); try { const r = await api.get(url); setData(r.data); } catch (e) { setError(e.response?.data?.message || "Could not load data."); } finally { setLoading(false); } };
@@ -58,8 +62,9 @@ function ProductCard({ product, onAdd }) {
   const sizes = (product.sizes || []).filter(s => s.stock > 0);
   const size = selection.size || sizes[0]?.size || "";
   const color = selection.color ?? product.colors?.[0] ?? "";
+  const images = imagesForColor(product, color);
   return <article className="product-card">
-    <div className="product-image"><Link className="product-image-link" to={`/products/${product._id}`} aria-label={`View ${product.name}`}><img src={product.images?.[0] || imageFallback} alt={product.name} onError={e => { e.currentTarget.src = imageFallback; }} /></Link>{product.featured && <span className="image-tag">FEATURED</span>}</div>
+    <div className="product-image"><Link className="product-image-link" to={`/products/${product._id}`} aria-label={`View ${product.name}`}><img src={images[0]} alt={product.name} onError={e => { e.currentTarget.src = imageFallback; }} /></Link>{product.featured && <span className="image-tag">FEATURED</span>}</div>
     <div className="product-info"><div className="product-meta">{product.gender} · {product.categoryName}</div><h3><Link to={`/products/${product._id}`}>{product.name}</Link></h3><div className="price-row"><strong>{money(product.price)}</strong>{product.compareAtPrice > product.price && <del>{money(product.compareAtPrice)}</del>}</div>
       <div className="product-options"><select aria-label="Select size" value={size} onChange={e => setSelection(p => ({ ...p, size: e.target.value }))}><option value="">Select size</option>{sizes.map(s => <option key={s.size} value={s.size}>{s.size}</option>)}</select><select aria-label="Select color" value={color} onChange={e => setSelection(p => ({ ...p, color: e.target.value }))}><option value="">Select color</option>{(product.colors || []).map(c => <option key={c}>{c}</option>)}</select></div>
       <button className="button full" disabled={!size || (!color && (product.colors || []).length > 0) || !sizes.length} onClick={() => { onAdd(product, size, color); setMessage("Added to cart"); setTimeout(() => setMessage(""), 1600); }}>{sizes.length ? "Add to cart" : "Out of stock"}</button>{message && <small className="success-text">{message}</small>}
@@ -114,7 +119,7 @@ function ProductDetail() {
   if (error || !product) return <div className="page"><Notice message={error || "Product not found."} type="error" /><Link className="button secondary" to="/"><ArrowLeft size={16} /> Back to shop</Link></div>;
 
   const sizes = (product.sizes || []).filter(item => item.stock > 0);
-  const images = product.images?.length ? product.images : [imageFallback];
+  const images = imagesForColor(product, color);
   const categoryId = product.category?._id || product.category;
 
   const addToCart = () => {
@@ -141,7 +146,7 @@ function ProductDetail() {
         <p className="detail-description">{product.description || "A thoughtfully selected piece from our collection."}</p>
         <div className="detail-facts"><span>Category</span><strong>{product.categoryName}</strong><span>For</span><strong>{product.gender}</strong></div>
         <label>Size<select value={size} onChange={e => setSize(e.target.value)}><option value="">Select size</option>{sizes.map(item => <option key={item.size} value={item.size}>{item.size} · {item.stock} available</option>)}</select></label>
-        {product.colors?.length > 0 && <label>Color<select value={color} onChange={e => setColor(e.target.value)}><option value="">Select color</option>{product.colors.map(item => <option key={item}>{item}</option>)}</select></label>}
+        {product.colors?.length > 0 && <label>Color<select value={color} onChange={e => { setColor(e.target.value); setSelectedImage(0); }}><option value="">Select color</option>{product.colors.map(item => <option key={item}>{item}</option>)}</select></label>}
         <button className="button full detail-add-button" disabled={!size || (product.colors?.length > 0 && !color) || !sizes.length || adding} onClick={addToCart}>{sizes.length ? (adding ? "Added to cart" : "Add to cart") : "Out of stock"}</button>
         {message && <p className="success-text" role="status">{message}</p>}
         {!sizes.length && <p className="muted">This product is currently unavailable in all sizes.</p>}
@@ -323,7 +328,7 @@ function AdminDashboard() {
 function AdminProducts() {
   const { data, loading, error, reload } = useLoad("/products/admin/all");
   const { data: cats } = useLoad("/categories/admin/all");
-  const blank = { name: "", description: "", gender: "Women", category: "", price: "", compareAtPrice: "", images: "", colors: "", sizes: "S:0,M:0,L:0", featured: false };
+  const blank = { name: "", description: "", gender: "Women", category: "", price: "", compareAtPrice: "", images: "", colorVariants: [{ color: "", images: "" }], sizes: "S:0,M:0,L:0", featured: false };
   const [form, setForm] = useState(blank);
   const [editing, setEditing] = useState(null);
   const [modal, setModal] = useState(false);
@@ -331,12 +336,15 @@ function AdminProducts() {
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
-  const openNew = () => { setEditing(null); setForm({ ...blank, category: cats.find(c => c.gender === "Women")?._id || "" }); setModal(true); };
-  const edit = p => { setEditing(p._id); setForm({ name: p.name, description: p.description || "", gender: p.gender, category: p.category?._id || p.category, price: p.price, compareAtPrice: p.compareAtPrice || "", images: (p.images || []).join(", "), colors: (p.colors || []).join(", "), sizes: (p.sizes || []).map(s => `${s.size}:${s.stock}`).join(","), featured: p.featured || false }); setModal(true); };
+  const openNew = () => { setEditing(null); setForm({ ...blank, colorVariants: [{ color: "", images: "" }], category: cats.find(c => c.gender === "Women")?._id || "" }); setModal(true); };
+  const edit = p => { setEditing(p._id); setForm({ name: p.name, description: p.description || "", gender: p.gender, category: p.category?._id || p.category, price: p.price, compareAtPrice: p.compareAtPrice || "", images: (p.images || []).join(", "), colorVariants: p.colorVariants?.length ? p.colorVariants.map(variant => ({ color: variant.color, images: (variant.images || []).join(", ") })) : (p.colors || []).map(color => ({ color, images: "" })).concat(p.colors?.length ? [] : [{ color: "", images: "" }]), sizes: (p.sizes || []).map(s => `${s.size}:${s.stock}`).join(","), featured: p.featured || false }); setModal(true); };
+  const updateVariant = (index, key, value) => setForm(current => ({ ...current, colorVariants: current.colorVariants.map((variant, i) => i === index ? { ...variant, [key]: value } : variant) }));
   const save = async e => {
     e.preventDefault(); setNotice("");
+    if (form.colorVariants.some(variant => !variant.color.trim() && variant.images.trim())) { setNotice("Could not save product. Enter a color name for every color-specific image group."); return; }
     const sizes = form.sizes.split(",").map(x => { const [size, stock] = x.split(":"); return { size: size?.trim(), stock: Number(stock || 0) }; }).filter(x => x.size);
-    const body = { ...form, price: Number(form.price), compareAtPrice: Number(form.compareAtPrice || 0), images: form.images.split(",").map(x => x.trim()).filter(Boolean), colors: form.colors.split(",").map(x => x.trim()).filter(Boolean), sizes };
+    const colorVariants = form.colorVariants.filter(variant => variant.color.trim()).map(variant => ({ color: variant.color.trim(), images: variant.images.split(",").map(image => image.trim()).filter(Boolean) }));
+    const body = { ...form, price: Number(form.price), compareAtPrice: Number(form.compareAtPrice || 0), images: form.images.split(",").map(x => x.trim()).filter(Boolean), colors: colorVariants.map(variant => variant.color), colorVariants, sizes };
     delete body.sizesText;
     try { if (editing) await api.put(`/products/${editing}`, body); else await api.post("/products", body); setModal(false); setNotice(editing ? "Product updated." : "Product added."); reload(); } catch (e) { setNotice(e.response?.data?.message || "Could not save product."); }
   };
@@ -357,8 +365,10 @@ function AdminProducts() {
       <label>Category<select required value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}><option value="">Select category</option>{cats.filter(c => c.gender === form.gender).map(c => <option key={c._id} value={c._id}>{c.name}</option>)}</select></label>
       <label>Price (INR)<input required min="0" type="number" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} /></label>
       <label>Compare-at price<input min="0" type="number" value={form.compareAtPrice} onChange={e => setForm({ ...form, compareAtPrice: e.target.value })} /></label>
-      <label>Image URLs (comma separated)<input value={form.images} onChange={e => setForm({ ...form, images: e.target.value })} placeholder="https://…" /></label>
-      <label>Colors (comma separated)<input value={form.colors} onChange={e => setForm({ ...form, colors: e.target.value })} placeholder="Black, Blue" /></label>
+      <label className="span-2">Shared image URLs (optional, comma separated)<input value={form.images} onChange={e => setForm({ ...form, images: e.target.value })} placeholder="https://…" /></label>
+      <div className="variant-editor span-2"><div className="split"><div><strong>Color variants</strong><small>Add each color and its image URLs. Customers see these images when they select a color.</small></div><button type="button" className="button secondary small" onClick={() => setForm(current => ({ ...current, colorVariants: [...current.colorVariants, { color: "", images: "" }] }))}><Plus size={15} /> Add color</button></div>
+        {form.colorVariants.map((variant, index) => <div className="variant-row" key={index}><label>Color name<input value={variant.color} onChange={e => updateVariant(index, "color", e.target.value)} placeholder="e.g. Black" /></label><label>Image URLs for this color<input value={variant.images} onChange={e => updateVariant(index, "images", e.target.value)} placeholder="https://… (comma separated)" /></label><button type="button" className="icon-button danger" title="Remove color" aria-label="Remove color" disabled={form.colorVariants.length === 1} onClick={() => setForm(current => ({ ...current, colorVariants: current.colorVariants.filter((_, i) => i !== index) }))}><Trash2 size={16} /></button></div>)}
+      </div>
       <label className="span-2">Sizes and stock (comma separated, SIZE:QTY)<input required value={form.sizes} onChange={e => setForm({ ...form, sizes: e.target.value })} placeholder="S:5,M:10,L:8 or 30:5,32:8" /></label>
       <label className="span-2">Description<textarea rows="3" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></label>
       <label className="checkbox-label span-2"><input type="checkbox" checked={form.featured} onChange={e => setForm({ ...form, featured: e.target.checked })} /> Featured product</label>
