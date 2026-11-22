@@ -6,7 +6,6 @@ const orderItemSchema = new mongoose.Schema({
   gender: String,
   categoryName: String,
   size: String,
-  color: String,
   quantity: { type: Number, min: 1 },
   unitPrice: { type: Number, min: 0 }
 }, { _id: false });

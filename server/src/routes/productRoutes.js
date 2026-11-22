@@ -14,7 +14,6 @@ router.get("/", async (req, res, next) => {
       else if (/^[a-f\d]{24}$/i.test(req.query.category)) return res.json([]);
     }
     if (req.query.size) q.sizes = { $elemMatch: { size: req.query.size, stock: { $gt: 0 } } };
-    if (req.query.color) q.colors = req.query.color;
     if (req.query.available === "true") q.sizes = { $elemMatch: { stock: { $gt: 0 } } };
     if (req.query.minPrice || req.query.maxPrice) q.price = { ...(req.query.minPrice ? { $gte: Number(req.query.minPrice) } : {}), ...(req.query.maxPrice ? { $lte: Number(req.query.maxPrice) } : {}) };
     if (req.query.search) q.name = { $regex: String(req.query.search).slice(0, 80), $options: "i" };
@@ -37,11 +36,11 @@ router.get("/:id", async (req, res, next) => {
 });
 router.post("/", protect, adminOnly, async (req, res, next) => {
   try {
-    const { name, gender, category, price, sizes = [], colors = [], images = [] } = req.body;
+    const { name, gender, category, price, sizes = [], images = [] } = req.body;
     const cat = await Category.findById(category);
     if (!cat || cat.gender !== gender) return res.status(400).json({ message: "Choose a category matching the selected gender." });
     if (!name?.trim() || !Number.isFinite(Number(price)) || Number(price) < 0) return res.status(400).json({ message: "Valid product name and price are required." });
-    const product = await Product.create({ ...req.body, name: name.trim(), category: cat._id, categoryName: cat.name, price: Number(price), sizes: normalizeProductSizes(sizes, cat.name), colors: normalizeStrings(colors), images: normalizeStrings(images) });
+    const product = await Product.create({ ...req.body, name: name.trim(), category: cat._id, categoryName: cat.name, price: Number(price), sizes: normalizeProductSizes(sizes, cat.name), images: normalizeStrings(images) });
     res.status(201).json(product);
   } catch (e) { next(e); }
 });
@@ -61,7 +60,6 @@ router.put("/:id", protect, adminOnly, async (req, res, next) => {
       updates.category = cat._id; updates.categoryName = cat.name;
     }
     if (updates.sizes) updates.sizes = normalizeProductSizes(updates.sizes, updates.categoryName || current.categoryName);
-    if (updates.colors) updates.colors = normalizeStrings(updates.colors);
     if (updates.images) updates.images = normalizeStrings(updates.images);
     const product = await Product.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true }).populate("category", "name gender");
     if (!product) return res.status(404).json({ message: "Product not found." });

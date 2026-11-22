@@ -21,11 +21,9 @@ router.post("/", protect, async (req, res, next) => {
       const product = await Product.findOne({ _id: item.productId, isActive: true });
       const qty = Math.floor(Number(item.quantity));
       const size = String(item.size || "");
-      const color = String(item.color || "");
       const sizeStock = product?.sizes.find(s => s.size === size);
       if (!product || !sizeStock || !Number.isInteger(qty) || sizeStock.stock < qty || qty < 1 || qty > 20) return res.status(400).json({ message: `Insufficient stock or invalid size for ${product?.name || "a product"}.` });
-      if (color && !product.colors.includes(color)) return res.status(400).json({ message: `Invalid color for ${product.name}.` });
-      resolved.push({ product, qty, size, color });
+      resolved.push({ product, qty, size });
       subtotal += product.price * qty;
     }
     let discount = 0;
@@ -42,7 +40,7 @@ router.post("/", protect, async (req, res, next) => {
     const total = Math.max(0, Math.round((subtotal - discount) * 100) / 100);
     const order = await Order.create({
       orderNumber: orderNumber(), customer: req.user._id,
-      items: resolved.map(({ product, qty, size, color }) => ({ product: product._id, name: product.name, image: product.images[0] || "", gender: product.gender, categoryName: product.categoryName, size, color, quantity: qty, unitPrice: product.price })),
+      items: resolved.map(({ product, qty, size }) => ({ product: product._id, name: product.name, image: product.images[0] || "", gender: product.gender, categoryName: product.categoryName, size, quantity: qty, unitPrice: product.price })),
       shippingAddress, subtotal, discount, total, couponCode: normalizedCoupon,
       paymentMethod, paymentStatus: paymentMethod === "COD" ? "Pending" : "Pending",
       status: "Pending"

@@ -7,7 +7,15 @@ router.use(protect);
 router.get("/", async (req, res, next) => {
   try {
     const cart = await Cart.findOne({ user: req.user._id }).populate("items.product");
-    res.json({ items: (cart?.items || []).filter(i => i.product && i.product.isActive).map(i => ({ product: i.product, size: i.size, color: i.color, quantity: i.quantity })) });
+    const grouped = new Map();
+    for (const item of cart?.items || []) {
+      if (!item.product || !item.product.isActive) continue;
+      const key = `${item.product._id}-${item.size}`;
+      const existing = grouped.get(key);
+      if (existing) existing.quantity = Math.min(20, existing.quantity + item.quantity);
+      else grouped.set(key, { product: item.product, size: item.size, quantity: item.quantity });
+    }
+    res.json({ items: [...grouped.values()] });
   } catch (e) { next(e); }
 });
 router.put("/", async (req, res, next) => {
@@ -17,12 +25,11 @@ router.put("/", async (req, res, next) => {
     for (const item of req.body.items) {
       const product = await Product.findOne({ _id: item.productId, isActive: true });
       const size = String(item.size || "");
-      const color = String(item.color || "");
       const quantity = Math.floor(Number(item.quantity));
-      if (!product || !product.sizes.some(s => s.size === size && s.stock > 0) || quantity < 1 || quantity > 20 || (color && !product.colors.includes(color))) continue;
-      const found = items.find(x => String(x.product) === String(product._id) && x.size === size && x.color === color);
+      if (!product || !product.sizes.some(s => s.size === size && s.stock > 0) || quantity < 1 || quantity > 20) continue;
+      const found = items.find(x => String(x.product) === String(product._id) && x.size === size);
       if (found) found.quantity = Math.min(20, found.quantity + quantity);
-      else items.push({ product: product._id, size, color, quantity });
+      else items.push({ product: product._id, size, quantity });
     }
     const cart = await Cart.findOneAndUpdate({ user: req.user._id }, { $set: { items } }, { new: true, upsert: true, runValidators: true });
     res.json({ message: "Cart saved.", count: cart.items.reduce((n, i) => n + i.quantity, 0) });
