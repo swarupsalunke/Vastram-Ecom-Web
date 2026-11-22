@@ -19,6 +19,9 @@ import { Search, SlidersHorizontal, Plus, Pencil, Trash2, Package, ShoppingBag, 
 const money = n => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(Number(n || 0));
 const imageFallback = "https://placehold.co/600x750/f6f6f6/777?text=Vastram";
 const isSizeFreeCategory = name => /^sarees?$/i.test(String(name || "").trim());
+const categoryRequiresSize = category => typeof category?.requiresSize === "boolean" ? category.requiresSize : !isSizeFreeCategory(category?.name);
+const productRequiresSize = product => typeof product?.requiresSize === "boolean" ? product.requiresSize : typeof product?.category?.requiresSize === "boolean" ? product.category.requiresSize : !isSizeFreeCategory(product?.categoryName);
+const orderItemRequiresSize = item => typeof item?.requiresSize === "boolean" ? item.requiresSize : !isSizeFreeCategory(item?.categoryName);
 const stockFromSizeText = value => String(value || "").split(",").reduce((total, entry) => total + Math.max(0, Number(entry.split(":")[1]) || 0), 0);
 function useLoad(url, deps = []) {
   const [data, setData] = useState([]); const [loading, setLoading] = useState(true); const [error, setError] = useState("");
@@ -58,12 +61,12 @@ function ProductCard({ product, onAdd }) {
   const [selection, setSelection] = useState({});
   const sizes = (product.sizes || []).filter(s => s.stock > 0);
   const size = selection.size || sizes[0]?.size || "";
-  const sizeFree = isSizeFreeCategory(product.categoryName);
+  const sizeFree = !productRequiresSize(product);
   return <article className="product-card">
     <div className="product-image"><Link className="product-image-link" to={`/products/${product._id}`} aria-label={`View ${product.name}`}><img src={product.images?.[0] || imageFallback} alt={product.name} onError={e => { e.currentTarget.src = imageFallback; }} /></Link>{product.featured && <span className="image-tag">FEATURED</span>}</div>
     <div className="product-info"><div className="product-meta">{product.gender} · {product.categoryName}</div><h3><Link to={`/products/${product._id}`}>{product.name}</Link></h3><div className="price-row"><strong>{money(product.price)}</strong>{product.compareAtPrice > product.price && <del>{money(product.compareAtPrice)}</del>}</div>
       {!sizeFree && <div className="product-options"><select aria-label="Select size" value={size} onChange={e => setSelection(p => ({ ...p, size: e.target.value }))}><option value="">Select size</option>{sizes.map(s => <option key={s.size} value={s.size}>{s.size}</option>)}</select></div>}
-      <button className="button full" disabled={!size || !sizes.length} onClick={() => { onAdd(product, size); setMessage("Added to cart"); setTimeout(() => setMessage(""), 1600); }}>{sizes.length ? "Add to cart" : "Out of stock"}</button>{message && <small className="success-text">{message}</small>}
+      <button className="button full" disabled={!size || !sizes.length} onClick={() => { const added = onAdd(product, size); setMessage(added ? "Added to cart" : `Maximum available stock: ${sizes.find(item => item.size === size)?.stock || 0}`); setTimeout(() => setMessage(""), 2200); }}>{sizes.length ? "Add to cart" : "Out of stock"}</button>{message && <small className={message.startsWith("Added") ? "success-text" : "muted"}>{message}</small>}
     </div>
   </article>;
 }
@@ -115,11 +118,16 @@ function ProductDetail() {
   const sizes = (product.sizes || []).filter(item => item.stock > 0);
   const images = product.images?.length ? product.images : [imageFallback];
   const categoryId = product.category?._id || product.category;
-  const sizeFree = isSizeFreeCategory(product.categoryName);
+  const sizeFree = !productRequiresSize(product);
 
   const addToCart = () => {
     setAdding(true);
-    add(product, size);
+    if (!add(product, size)) {
+      setMessage(`Maximum available stock: ${sizes.find(item => item.size === size)?.stock || 0}`);
+      setAdding(false);
+      setTimeout(() => setMessage(""), 2200);
+      return;
+    }
     setMessage("Added to cart.");
     setTimeout(() => {
       setMessage("");
@@ -172,36 +180,51 @@ function CartPage() {
   const [payment, setPayment] = useState("COD"); const [coupon, setCoupon] = useState(""); const [message, setMessage] = useState(""); const [busy, setBusy] = useState(false);
   const checkout = async e => {
     e.preventDefault(); setMessage(""); setBusy(true);
+    let onlineOrderId = "";
+    let verificationStarted = false;
+    let releaseRequested = false;
+    const releasePendingOrder = async reason => {
+      if (!onlineOrderId || releaseRequested) return;
+      releaseRequested = true;
+      try {
+        await api.patch(`/orders/${onlineOrderId}/cancel`, { reason });
+        setMessage("Payment was not completed. Your order was cancelled and reserved stock released.");
+      } catch (err) {
+        setMessage(err.response?.data?.message || "Payment status could not be confirmed. Check My Orders before retrying.");
+      }
+    };
     try {
       if (!cart.length) throw new Error("Your cart is empty.");
       const { data } = await api.post("/orders", { items: cart.map(x => ({ productId: x.productId, size: x.size, quantity: x.quantity })), shippingAddress: address, paymentMethod: payment, couponCode: coupon || undefined });
       if (payment === "COD") { clear(); navigate("/account?placed=1"); return; }
+      onlineOrderId = data.order._id;
       const { data: rp } = await api.post("/payments/razorpay/order", { orderId: data.order._id });
       if (!window.Razorpay) await loadRazorpay();
       const checkout = new window.Razorpay({
         key: rp.key, amount: rp.amount, currency: rp.currency, name: "Vastram", description: `Order ${data.order.orderNumber}`, order_id: rp.id,
         prefill: { name: address.fullName, contact: address.phone, email: user.email },
         handler: async response => {
+          verificationStarted = true;
           try { await api.post("/payments/razorpay/verify", { orderId: data.order._id, ...response }); clear(); navigate("/account?placed=1"); }
           catch (err) { setMessage(err.response?.data?.message || "Payment verification failed. Contact the shop before retrying."); }
         },
-        modal: { ondismiss: () => setMessage("Payment window closed. Your order is still pending; check My Orders before retrying.") }
+        modal: { ondismiss: () => { if (!verificationStarted) releasePendingOrder("Payment window closed before payment completed."); } }
       });
       checkout.on("payment.failed", function (response) {
         console.error("Razorpay Payment Failed:", response.error);
-
-        setMessage(
-          response.error?.description || "Payment failed. Please try again."
-        );
+        releasePendingOrder(response.error?.description || "Payment failed.");
       });
 
       checkout.open();
-    } catch (e) { setMessage(e.response?.data?.message || e.message || "Checkout failed."); }
+    } catch (e) {
+      if (onlineOrderId && !verificationStarted) await releasePendingOrder(e.response?.data?.message || e.message || "Checkout failed.");
+      else setMessage(e.response?.data?.message || e.message || "Checkout failed.");
+    }
     finally { setBusy(false); }
   };
   return <div className="page narrow"><PageTitle title="Your cart" subtitle="Review your items and complete checkout." />
     {!cart.length ? <div className="empty"><ShoppingBag size={34} /><h3>Your cart is empty</h3><a className="button" href="/">Explore products</a></div> : <>
-      <div className="cart-list">{cart.map(item => <div className="cart-item" key={item.key}><img src={item.image || imageFallback} alt={item.name} onError={e => e.currentTarget.src = imageFallback} /><div className="cart-item-info"><strong>{item.name}</strong><span>{item.gender}{!isSizeFreeCategory(item.categoryName) && ` · Size ${item.size}`}</span><b>{money(item.price)}</b><div className="inline-controls"><input aria-label="Quantity" type="number" min="1" max="20" value={item.quantity} onChange={e => update(item.key, e.target.value)} /><button className="text-button danger-text" onClick={() => remove(item.key)}>Remove</button></div></div><strong>{money(item.price * item.quantity)}</strong></div>)}</div>
+      <div className="cart-list">{cart.map(item => <div className="cart-item" key={item.key}><img src={item.image || imageFallback} alt={item.name} onError={e => e.currentTarget.src = imageFallback} /><div className="cart-item-info"><strong>{item.name}</strong><span>{item.gender}{orderItemRequiresSize(item) && ` · Size ${item.size}`}</span><small>{item.stock > 0 ? `${item.stock} available` : "Stock will be checked at checkout"}</small><b>{money(item.price)}</b><div className="inline-controls"><input aria-label="Quantity" type="number" min="1" max={Math.min(20, item.stock || 20)} value={item.quantity} onChange={e => update(item.key, e.target.value)} /><button className="text-button danger-text" onClick={() => remove(item.key)}>Remove</button></div></div><strong>{money(item.price * item.quantity)}</strong></div>)}</div>
       <form className="checkout-card" onSubmit={checkout}><h2>Delivery address</h2><div className="form-grid"><label>Full name<input required value={address.fullName} onChange={e => setAddress({ ...address, fullName: e.target.value })} /></label><label>Phone<input required value={address.phone} onChange={e => setAddress({ ...address, phone: e.target.value })} /></label><label className="span-2">Address line 1<input required value={address.line1} onChange={e => setAddress({ ...address, line1: e.target.value })} /></label><label className="span-2">Address line 2 (optional)<input value={address.line2} onChange={e => setAddress({ ...address, line2: e.target.value })} /></label><label>City<input required value={address.city} onChange={e => setAddress({ ...address, city: e.target.value })} /></label><label>State<input required value={address.state} onChange={e => setAddress({ ...address, state: e.target.value })} /></label><label>PIN code<input required inputMode="numeric" value={address.postalCode} onChange={e => setAddress({ ...address, postalCode: e.target.value })} /></label></div>
         <h2>Payment method</h2><div className="payment-options"><label><input type="radio" checked={payment === "COD"} onChange={() => setPayment("COD")} /> Cash on Delivery</label><label><input type="radio" checked={payment === "RAZORPAY"} onChange={() => setPayment("RAZORPAY")} /> Online payment (Razorpay)</label></div>
         <label>Coupon code (optional)<input value={coupon} onChange={e => setCoupon(e.target.value.toUpperCase())} placeholder="Enter coupon code" /></label>
@@ -296,7 +319,7 @@ function AccountPage() {
               {paginatedOrders.map(o => <tr key={o._id}>
                 <td>{o.orderNumber}</td>
                 <td>{new Date(o.createdAt).toLocaleDateString()}</td>
-                <td>{o.items.map(i => `${i.name}${isSizeFreeCategory(i.categoryName) ? "" : ` (${i.size})`} ×${i.quantity}`).join(", ")}</td>
+                <td>{o.items.map(i => `${i.name}${orderItemRequiresSize(i) ? ` (${i.size})` : ""} ×${i.quantity}`).join(", ")}</td>
                 <td>{money(o.total)}</td>
                 <td>{o.paymentMethod}<br /><small>{o.paymentStatus}</small></td>
                 <td><span className={`status ${o.status.toLowerCase().replaceAll(" ", "-")}`}>{o.status}</span>{o.deliveryMessage && <small className="table-subtext">{o.deliveryMessage}</small>}</td>
@@ -334,11 +357,11 @@ function AdminProducts() {
   const edit = p => { setEditing(p._id); setForm({ name: p.name, description: p.description || "", gender: p.gender, category: p.category?._id || p.category, price: p.price, compareAtPrice: p.compareAtPrice || "", images: (p.images || []).join(", "), sizes: (p.sizes || []).map(s => `${s.size}:${s.stock}`).join(","), stock: String((p.sizes || []).reduce((total, size) => total + size.stock, 0)), featured: p.featured || false }); setModal(true); };
   const save = async e => {
     e.preventDefault(); setNotice("");
-    const sizeFree = isSizeFreeCategory(cats.find(category => category._id === form.category)?.name);
+    const sizeFree = !categoryRequiresSize(cats.find(category => category._id === form.category));
     const sizes = sizeFree ? [{ size: "One Size", stock: Number(form.stock) || 0 }] : form.sizes.split(",").map(x => { const [size, stock] = x.split(":"); return { size: size?.trim(), stock: Number(stock || 0) }; }).filter(x => x.size);
     const body = { ...form, price: Number(form.price), compareAtPrice: Number(form.compareAtPrice || 0), images: form.images.split(",").map(x => x.trim()).filter(Boolean), sizes };
     delete body.stock;
-    try { if (editing) await api.put(`/products/${editing}`, body); else await api.post("/products", body); setModal(false); setNotice(editing ? "Product updated." : "Product added."); reload(); } catch (e) { setNotice(e.response?.data?.message || "Could not save product."); }
+    try { if (editing) await api.put(`/products/${editing}`, body); else await api.post("/products", body); setModal(false); setNotice(editing ? "Product updated." : "Product added."); reload(); } catch (e) { setNotice(`Could not save product: ${e.response?.data?.message || "Please review the product details."}`); }
   };
   const remove = async id => { if (!confirm("Remove this product from the storefront? Historical order details will be preserved.")) return; try { await api.delete(`/products/${id}`); setNotice("Product removed from storefront."); reload(); } catch (e) { setNotice(e.response?.data?.message || "Could not remove product."); } };
   const filtered = data.filter(p => `${p.name} ${p.gender} ${p.categoryName}`.toLowerCase().includes(search.toLowerCase()));
@@ -351,14 +374,14 @@ function AdminProducts() {
 
   return <div><PageTitle title="Product Management" subtitle="Add and manage clothing products." action={<button className="button" onClick={openNew}><Plus size={17} /> Add product</button>} />{notice && <Notice message={notice} type={notice.startsWith("Could") ? "error" : "success"} />}{error && <Notice message={error} type="error" />}
     <div className="toolbar"><div className="search-box"><Search size={17} /><input placeholder="Search products…" value={search} onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} /></div><span className="muted">{filtered.length} products</span></div>
-    {loading ? <p>Loading…</p> : <><div className="table-wrap panel"><table><thead><tr><th>Product</th><th>Gender / Category</th><th>Price</th><th>Sizes & stock</th><th>Actions</th></tr></thead><tbody>{paginatedProducts.map(p => <tr key={p._id}><td><div className="table-product"><img src={p.images?.[0] || imageFallback} onError={e => e.currentTarget.src = imageFallback} alt={p.name} /><div><strong>{p.name}</strong><small>{p.isActive ? "Active" : "Archived"}</small></div></div></td><td>{p.gender} / {p.categoryName}</td><td>{money(p.price)}</td><td>{isSizeFreeCategory(p.categoryName) ? `Stock: ${(p.sizes || []).reduce((total, size) => total + size.stock, 0)}` : (p.sizes || []).map(s => `${s.size}: ${s.stock}`).join(" · ")}</td><td><div className="action-row"><button className="icon-button" title="Edit" onClick={() => edit(p)}><Pencil size={16} /></button><button className="icon-button danger" title="Remove" onClick={() => remove(p._id)}><Trash2 size={16} /></button></div></td></tr>)}</tbody></table></div><Pagination currentPage={currentPage} totalItems={filtered.length} pageSize={pageSize} onPageChange={setCurrentPage} /></>}
+    {loading ? <p>Loading…</p> : <><div className="table-wrap panel"><table><thead><tr><th>Product</th><th>Gender / Category</th><th>Price</th><th>Sizes & stock</th><th>Actions</th></tr></thead><tbody>{paginatedProducts.map(p => <tr key={p._id}><td><div className="table-product"><img src={p.images?.[0] || imageFallback} onError={e => e.currentTarget.src = imageFallback} alt={p.name} /><div><strong>{p.name}</strong><small>{p.isActive ? "Active" : "Archived"}</small></div></div></td><td>{p.gender} / {p.categoryName}</td><td>{money(p.price)}</td><td>{!productRequiresSize(p) ? `Stock: ${(p.sizes || []).reduce((total, size) => total + size.stock, 0)}` : (p.sizes || []).map(s => `${s.size}: ${s.stock}`).join(" · ")}</td><td><div className="action-row"><button className="icon-button" title="Edit" onClick={() => edit(p)}><Pencil size={16} /></button><button className="icon-button danger" title="Remove" onClick={() => remove(p._id)}><Trash2 size={16} /></button></div></td></tr>)}</tbody></table></div><Pagination currentPage={currentPage} totalItems={filtered.length} pageSize={pageSize} onPageChange={setCurrentPage} /></>}
     {modal && <Modal title={editing ? "Edit product" : "Add product"} onClose={() => setModal(false)}><form onSubmit={save} className="form-grid">
       <label>Product name<input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></label><label>Gender<select value={form.gender} onChange={e => { const gender = e.target.value; setForm({ ...form, gender, category: cats.find(c => c.gender === gender)?._id || "" }); }}>{["Women", "Men"].map(x => <option key={x}>{x}</option>)}</select></label>
-      <label>Category<select required value={form.category} onChange={e => { const nextCategory = cats.find(category => category._id === e.target.value); setForm(current => ({ ...current, category: e.target.value, stock: isSizeFreeCategory(nextCategory?.name) ? String(stockFromSizeText(current.sizes)) : current.stock })); }}><option value="">Select category</option>{cats.filter(c => c.gender === form.gender).map(c => <option key={c._id} value={c._id}>{c.name}</option>)}</select></label>
+      <label>Category<select required value={form.category} onChange={e => { const nextCategory = cats.find(category => category._id === e.target.value); setForm(current => ({ ...current, category: e.target.value, stock: !categoryRequiresSize(nextCategory) ? String(stockFromSizeText(current.sizes)) : current.stock })); }}><option value="">Select category</option>{cats.filter(c => c.gender === form.gender).map(c => <option key={c._id} value={c._id}>{c.name}</option>)}</select></label>
       <label>Price (INR)<input required min="0" type="number" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} /></label>
       <label>Compare-at price<input min="0" type="number" value={form.compareAtPrice} onChange={e => setForm({ ...form, compareAtPrice: e.target.value })} /></label>
       <label className="span-2">Shared image URLs (optional, comma separated)<input value={form.images} onChange={e => setForm({ ...form, images: e.target.value })} placeholder="https://…" /></label>
-      {isSizeFreeCategory(cats.find(category => category._id === form.category)?.name) ? <label>Stock quantity<input required min="0" type="number" value={form.stock} onChange={e => setForm({ ...form, stock: e.target.value })} /></label> : <label className="span-2">Sizes and stock (comma separated, SIZE:QTY)<input required value={form.sizes} onChange={e => setForm({ ...form, sizes: e.target.value })} placeholder="S:5,M:10,L:8 or 30:5,32:8" /></label>}
+      {!categoryRequiresSize(cats.find(category => category._id === form.category)) ? <label>Stock quantity<input required min="0" type="number" value={form.stock} onChange={e => setForm({ ...form, stock: e.target.value })} /></label> : <label className="span-2">Sizes and stock (comma separated, SIZE:QTY)<input required value={form.sizes} onChange={e => setForm({ ...form, sizes: e.target.value })} placeholder="S:5,M:10,L:8 or 30:5,32:8" /></label>}
       <label className="span-2">Description<textarea rows="3" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></label>
       <label className="checkbox-label span-2"><input type="checkbox" checked={form.featured} onChange={e => setForm({ ...form, featured: e.target.checked })} /> Featured product</label>
       <div className="form-actions span-2"><button type="button" className="button secondary" onClick={() => setModal(false)}>Cancel</button><button className="button">{editing ? "Save changes" : "Add product"}</button></div>
@@ -370,7 +393,7 @@ function Modal({ title, children, onClose }) { return <div className="modal-back
 
 function AdminCategories() {
   const { data, loading, error, reload } = useLoad("/categories/admin/all");
-  const [form, setForm] = useState({ name: "", gender: "Women" });
+  const [form, setForm] = useState({ name: "", gender: "Women", requiresSize: true });
   const [editing, setEditing] = useState(null);
   const [notice, setNotice] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -379,11 +402,11 @@ function AdminCategories() {
   const paginatedCategories = data.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   useEffect(() => { setCurrentPage(page => Math.min(page, Math.max(1, totalPages))); }, [totalPages]);
 
-  const save = async e => { e.preventDefault(); try { if (editing) await api.put(`/categories/${editing}`, form); else await api.post("/categories", form); setForm({ name: "", gender: "Women" }); setEditing(null); setNotice("Category saved."); setCurrentPage(1); reload(); } catch (e) { setNotice(e.response?.data?.message || "Could not save category."); } };
+  const save = async e => { e.preventDefault(); try { if (editing) await api.put(`/categories/${editing}`, form); else await api.post("/categories", form); setForm({ name: "", gender: "Women", requiresSize: true }); setEditing(null); setNotice("Category saved."); setCurrentPage(1); reload(); } catch (e) { setNotice(e.response?.data?.message || "Could not save category."); } };
   const remove = async id => { if (!confirm("Delete this category?")) return; try { await api.delete(`/categories/${id}`); setNotice("Category deleted."); reload(); } catch (e) { setNotice(e.response?.data?.message || "Could not delete category."); } };
   return <div><PageTitle title="Categories" subtitle="Organize products for Men and Women." />{notice && <Notice message={notice} type={notice.includes("Could") ? "error" : "success"} />}{error && <Notice message={error} type="error" />}
-    <form className="panel inline-form" onSubmit={save}><label>Category name<input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Sarees" /></label><label>Gender<select value={form.gender} onChange={e => setForm({ ...form, gender: e.target.value })}><option>Women</option><option>Men</option></select></label><button className="button">{editing ? "Update category" : "Add category"}</button>{editing && <button type="button" className="button secondary" onClick={() => { setEditing(null); setForm({ name: "", gender: "Women" }); }}>Cancel</button>}</form>
-    <div className="table-wrap panel"><table><thead><tr><th>Name</th><th>Gender</th><th>Actions</th></tr></thead><tbody>{loading ? <tr><td colSpan="3">Loading…</td></tr> : paginatedCategories.map(c => <tr key={c._id}><td>{c.name}</td><td>{c.gender}</td><td><div className="action-row"><button className="icon-button" onClick={() => { setEditing(c._id); setForm({ name: c.name, gender: c.gender }); }}><Pencil size={16} /></button><button className="icon-button danger" onClick={() => remove(c._id)}><Trash2 size={16} /></button></div></td></tr>)}</tbody></table></div>
+    <form className="panel inline-form" onSubmit={save}><label>Category name<input required value={form.name} onChange={e => setForm(current => ({ ...current, name: e.target.value, requiresSize: editing ? current.requiresSize : !isSizeFreeCategory(e.target.value) }))} placeholder="e.g. Sarees" /></label><label>Gender<select value={form.gender} onChange={e => setForm({ ...form, gender: e.target.value })}><option>Women</option><option>Men</option></select></label><label className="checkbox-label"><input type="checkbox" checked={form.requiresSize} onChange={e => setForm({ ...form, requiresSize: e.target.checked })} /> Requires size selection</label><button className="button">{editing ? "Update category" : "Add category"}</button>{editing && <button type="button" className="button secondary" onClick={() => { setEditing(null); setForm({ name: "", gender: "Women", requiresSize: true }); }}>Cancel</button>}</form>
+    <div className="table-wrap panel"><table><thead><tr><th>Name</th><th>Gender</th><th>Size selection</th><th>Actions</th></tr></thead><tbody>{loading ? <tr><td colSpan="4">Loading…</td></tr> : paginatedCategories.map(c => <tr key={c._id}><td>{c.name}</td><td>{c.gender}</td><td>{categoryRequiresSize(c) ? "Required" : "Not required"}</td><td><div className="action-row"><button className="icon-button" onClick={() => { setEditing(c._id); setForm({ name: c.name, gender: c.gender, requiresSize: categoryRequiresSize(c) }); }}><Pencil size={16} /></button><button className="icon-button danger" onClick={() => remove(c._id)}><Trash2 size={16} /></button></div></td></tr>)}</tbody></table></div>
     {!loading && <Pagination currentPage={currentPage} totalItems={data.length} pageSize={pageSize} onPageChange={setCurrentPage} />}
   </div>;
 }
@@ -400,7 +423,7 @@ function AdminOrders() {
   const update = async (o, status) => { try { await api.patch(`/orders/${o._id}/status`, { status }); setNotice(`Order ${o.orderNumber} updated.`); reload(); } catch (e) { setNotice(e.response?.data?.message || "Could not update order."); } };
   const cancel = async o => { if (!confirm("Cancel this order?")) return; try { await api.patch(`/orders/${o._id}/cancel`, { reason: "Cancelled by admin" }); setNotice("Order cancelled."); reload(); } catch (e) { setNotice(e.response?.data?.message || "Could not cancel order."); } };
   return <div><PageTitle title="Order Management" subtitle="Review orders and update fulfilment status." />{notice && <Notice message={notice} type={notice.startsWith("Could") ? "error" : "success"} />}{error && <Notice message={error} type="error" />}
-    <div className="table-wrap panel"><table><thead><tr><th>Order</th><th>Customer</th><th>Items / Address</th><th>Total / Payment</th><th>Status</th><th>Update</th></tr></thead><tbody>{loading ? <tr><td colSpan="6">Loading…</td></tr> : paginatedOrders.map(o => <tr key={o._id}><td><strong>{o.orderNumber}</strong><small>{new Date(o.createdAt).toLocaleString()}</small></td><td>{o.customer?.name}<small>{o.customer?.email}</small></td><td>{o.items.map(i => `${i.name}${isSizeFreeCategory(i.categoryName) ? "" : ` (${i.size})`} ×${i.quantity}`).join(", ")}<small>{o.shippingAddress?.fullName}, {o.shippingAddress?.line1}, {o.shippingAddress?.city}, {o.shippingAddress?.postalCode}</small></td><td>{money(o.total)}<small>{o.paymentMethod} · {o.paymentStatus}</small></td><td><span className="status">{o.status}</span></td><td>{o.status !== "Cancelled" && o.status !== "Delivered" ? <><select value={o.status} onChange={e => update(o, e.target.value)}>{["Pending", "Confirmed", "Processing", "Packed", "Shipped", "Out for Delivery", "Delivered"].map(s => <option key={s}>{s}</option>)}</select><button className="text-button danger-text" onClick={() => cancel(o)}>Cancel</button></> : "—"}</td></tr>)}</tbody></table></div>
+    <div className="table-wrap panel"><table><thead><tr><th>Order</th><th>Customer</th><th>Items / Address</th><th>Total / Payment</th><th>Status</th><th>Update</th></tr></thead><tbody>{loading ? <tr><td colSpan="6">Loading…</td></tr> : paginatedOrders.map(o => <tr key={o._id}><td><strong>{o.orderNumber}</strong><small>{new Date(o.createdAt).toLocaleString()}</small></td><td>{o.customer?.name}<small>{o.customer?.email}</small></td><td>{o.items.map(i => `${i.name}${orderItemRequiresSize(i) ? ` (${i.size})` : ""} ×${i.quantity}`).join(", ")}<small>{o.shippingAddress?.fullName}, {o.shippingAddress?.line1}, {o.shippingAddress?.city}, {o.shippingAddress?.postalCode}</small></td><td>{money(o.total)}<small>{o.paymentMethod} · {o.paymentStatus}</small></td><td><span className="status">{o.status}</span></td><td>{o.status !== "Cancelled" && o.status !== "Delivered" ? <><select value={o.status} onChange={e => update(o, e.target.value)}>{["Pending", "Confirmed", "Processing", "Packed", "Shipped", "Out for Delivery", "Delivered"].map(s => <option key={s}>{s}</option>)}</select><button className="text-button danger-text" onClick={() => cancel(o)}>Cancel</button></> : "—"}</td></tr>)}</tbody></table></div>
     {!loading && <Pagination currentPage={currentPage} totalItems={data.length} pageSize={pageSize} onPageChange={setCurrentPage} />}
   </div>;
 }
@@ -411,20 +434,20 @@ function AdminInventory() {
   const [notice, setNotice] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
-  const inventoryRows = data.filter(p => p.isActive).flatMap(p => isSizeFreeCategory(p.categoryName)
+  const inventoryRows = data.filter(p => p.isActive).flatMap(p => !productRequiresSize(p)
     ? [{ product: p, size: { size: "One Size", stock: (p.sizes || []).reduce((total, item) => total + item.stock, 0) }, key: `${p._id}-stock` }]
     : (p.sizes || []).map(s => ({ product: p, size: s, key: `${p._id}-${s.size}` })));
   const totalPages = Math.ceil(inventoryRows.length / pageSize);
   const paginatedRows = inventoryRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   useEffect(() => { setCurrentPage(page => Math.min(page, Math.max(1, totalPages))); }, [totalPages]);
-  const update = async (p, size, stock) => { const sizes = isSizeFreeCategory(p.categoryName) ? [{ size: "One Size", stock: Number(stock) }] : p.sizes.map(s => s.size === size ? { ...s, stock: Number(stock) } : s); try { await api.put(`/products/${p._id}`, { sizes }); setNotice("Stock updated."); reload(); } catch (e) { setNotice(e.response?.data?.message || "Could not update stock."); } };
+  const update = async (p, size, stock) => { const sizes = !productRequiresSize(p) ? [{ size: "One Size", stock: Number(stock) }] : p.sizes.map(s => s.size === size ? { ...s, stock: Number(stock) } : s); try { await api.put(`/products/${p._id}`, { sizes }); setNotice("Stock updated."); reload(); } catch (e) { setNotice(e.response?.data?.message || "Could not update stock."); } };
   return <div><PageTitle title="Inventory / Stock" subtitle="Update stock by product size or item." />{notice && <Notice message={notice} type="error" />}{error && <Notice message={error} type="error" />}
     <div className="table-wrap panel"><table><thead><tr><th>Product</th><th>Gender</th><th>Size / unit</th><th>Available stock</th><th>Save</th></tr></thead><tbody>{loading ? <tr><td colSpan="5">Loading…</td></tr> : paginatedRows.map(row => <InventoryRow key={row.key} product={row.product} size={row.size} onSave={update} />)}</tbody></table></div>
     {!loading && <Pagination currentPage={currentPage} totalItems={inventoryRows.length} pageSize={pageSize} onPageChange={setCurrentPage} />}
   </div>;
 }
 
-function InventoryRow({ product, size, onSave }) { const [stock, setStock] = useState(size.stock); useEffect(() => setStock(size.stock), [size.stock]); return <tr><td>{product.name}</td><td>{product.gender}</td><td>{isSizeFreeCategory(product.categoryName) ? "—" : size.size}</td><td><input className="stock-input" type="number" min="0" value={stock} onChange={e => setStock(e.target.value)} /></td><td><button className="button small" onClick={() => onSave(product, size.size, stock)}>Update</button></td></tr>; }
+function InventoryRow({ product, size, onSave }) { const [stock, setStock] = useState(size.stock); useEffect(() => setStock(size.stock), [size.stock]); return <tr><td>{product.name}</td><td>{product.gender}</td><td>{productRequiresSize(product) ? size.size : "—"}</td><td><input className="stock-input" type="number" min="0" value={stock} onChange={e => setStock(e.target.value)} /></td><td><button className="button small" onClick={() => onSave(product, size.size, stock)}>Update</button></td></tr>; }
 
 
 function AdminCustomers() {

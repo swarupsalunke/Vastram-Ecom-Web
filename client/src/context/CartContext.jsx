@@ -25,7 +25,9 @@ function loadCart() {
 }
 function toCartItem(item) {
   const product = item.product || item;
-  return { key: `${product._id}-${item.size}`, productId: product._id, name: product.name, price: product.price, image: product.images?.[0] || "", gender: product.gender, categoryName: product.categoryName, size: item.size, quantity: item.quantity };
+  const stock = product.sizes?.find(size => size.size === item.size)?.stock || 0;
+  const requiresSize = product.requiresSize ?? product.category?.requiresSize ?? !/^sarees?$/i.test(String(product.categoryName || "").trim());
+  return { key: `${product._id}-${item.size}`, productId: product._id, name: product.name, price: product.price, image: product.images?.[0] || "", gender: product.gender, categoryName: product.categoryName, requiresSize, size: item.size, stock, quantity: Math.min(item.quantity, stock) };
 }
 export function CartProvider({ children }) {
   const { user, loading: authLoading } = useAuth();
@@ -50,12 +52,19 @@ export function CartProvider({ children }) {
   const add = (product, size) => {
     const key = `${product._id}-${size}`;
     const found = cart.find(x => x.key === key);
-    const next = found ? cart.map(x => x.key === key ? { ...x, quantity: Math.min(20, x.quantity + 1) } : x)
-      : [...cart, { key, productId: product._id, name: product.name, price: product.price, image: product.images?.[0] || "", gender: product.gender, categoryName: product.categoryName, size, quantity: 1 }];
-    setCart(next); saveForUser(next);
+    const stock = product.sizes?.find(item => item.size === size)?.stock || 0;
+    const maxQuantity = Math.min(20, stock);
+    if (maxQuantity < 1) return false;
+    if (found?.quantity >= maxQuantity) {
+      const synced = cart.map(item => item.key === key ? { ...item, stock, quantity: maxQuantity } : item);
+      setCart(synced); saveForUser(synced); return false;
+    }
+    const next = found ? cart.map(x => x.key === key ? { ...x, stock, quantity: Math.min(maxQuantity, x.quantity + 1) } : x)
+      : [...cart, { key, productId: product._id, name: product.name, price: product.price, image: product.images?.[0] || "", gender: product.gender, categoryName: product.categoryName, requiresSize: product.requiresSize ?? product.category?.requiresSize ?? !/^sarees?$/i.test(String(product.categoryName || "").trim()), size, stock, quantity: 1 }];
+    setCart(next); saveForUser(next); return true;
   };
   const update = (key, quantity) => {
-    const next = cart.map(x => x.key === key ? { ...x, quantity: Math.max(1, Math.min(20, Number(quantity) || 1)) } : x);
+    const next = cart.map(x => x.key === key ? { ...x, quantity: Math.max(1, Math.min(20, x.stock > 0 ? x.stock : 20, Number(quantity) || 1)) } : x);
     setCart(next); saveForUser(next);
   };
   const remove = key => { const next = cart.filter(x => x.key !== key); setCart(next); saveForUser(next); };
