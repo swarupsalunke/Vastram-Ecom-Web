@@ -6,14 +6,16 @@ const router = Router();
 router.use(protect);
 router.get("/", async (req, res, next) => {
   try {
-    const cart = await Cart.findOne({ user: req.user._id }).populate("items.product");
+    const cart = await Cart.findOne({ user: req.user._id }).populate({ path: "items.product", populate: { path: "category", select: "name requiresSize" } });
     const grouped = new Map();
     for (const item of cart?.items || []) {
       if (!item.product || !item.product.isActive) continue;
       const key = `${item.product._id}-${item.size}`;
+      const availableStock = item.product.sizes.find(size => size.size === item.size)?.stock || 0;
+      if (availableStock < 1) continue;
       const existing = grouped.get(key);
-      if (existing) existing.quantity = Math.min(20, existing.quantity + item.quantity);
-      else grouped.set(key, { product: item.product, size: item.size, quantity: item.quantity });
+      if (existing) existing.quantity = Math.min(20, availableStock, existing.quantity + item.quantity);
+      else grouped.set(key, { product: item.product, size: item.size, quantity: Math.min(20, availableStock, item.quantity) });
     }
     res.json({ items: [...grouped.values()] });
   } catch (e) { next(e); }
@@ -26,9 +28,11 @@ router.put("/", async (req, res, next) => {
       const product = await Product.findOne({ _id: item.productId, isActive: true });
       const size = String(item.size || "");
       const quantity = Math.floor(Number(item.quantity));
-      if (!product || !product.sizes.some(s => s.size === size && s.stock > 0) || quantity < 1 || quantity > 20) continue;
+      const sizeStock = product?.sizes.find(s => s.size === size)?.stock || 0;
+      if (!product || quantity < 1 || quantity > 20) return res.status(400).json({ message: "Invalid cart item." });
       const found = items.find(x => String(x.product) === String(product._id) && x.size === size);
-      if (found) found.quantity = Math.min(20, found.quantity + quantity);
+      if (sizeStock < quantity || sizeStock < (found?.quantity || 0) + quantity) return res.status(409).json({ message: `Only ${sizeStock} item(s) are available for ${product.name} (${size}).` });
+      if (found) found.quantity += quantity;
       else items.push({ product: product._id, size, quantity });
     }
     const cart = await Cart.findOneAndUpdate({ user: req.user._id }, { $set: { items } }, { new: true, upsert: true, runValidators: true });

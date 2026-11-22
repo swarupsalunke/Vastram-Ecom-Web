@@ -5,6 +5,7 @@ const orderItemSchema = new mongoose.Schema({
   image: String,
   gender: String,
   categoryName: String,
+  requiresSize: Boolean,
   size: String,
   quantity: { type: Number, min: 1 },
   unitPrice: { type: Number, min: 0 }
@@ -22,6 +23,8 @@ const orderSchema = new mongoose.Schema({
   paymentStatus: { type: String, enum: ["Pending", "Paid", "Failed", "Refund Pending", "Refunded"], default: "Pending" },
   paymentOrderId: String,
   paymentId: String,
+  inventoryStatus: { type: String, enum: ["none", "reserved", "deducted", "released", "review"], default: "none" },
+  inventoryReservationExpiresAt: Date,
   status: { type: String, enum: ["Pending", "Confirmed", "Processing", "Packed", "Shipped", "Out for Delivery", "Delivered", "Cancelled"], default: "Pending" },
   cancellationReason: String,
   deliveryMessage: String,

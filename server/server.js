@@ -12,6 +12,7 @@ import paymentRoutes from "./src/routes/paymentRoutes.js";
 import adminRoutes from "./src/routes/adminRoutes.js";
 import couponRoutes from "./src/routes/couponRoutes.js";
 import messageRoutes from "./src/routes/messageRoutes.js";
+import { expirePendingInventoryReservations } from "./src/utils/inventory.js";
 
 dotenv.config();
 const app = express();
@@ -57,6 +58,12 @@ const port = process.env.PORT || 5000;
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => {
     console.log("MongoDB connected");
+    const releaseExpiredReservations = () => {
+      expirePendingInventoryReservations().catch(err => console.error("Inventory reservation expiry failed:", err));
+    };
+    releaseExpiredReservations();
+    const reservationExpiryTimer = setInterval(releaseExpiredReservations, 60_000);
+    reservationExpiryTimer.unref();
     app.listen(port, () => console.log(`Vastram API running on port ${port}`));
   })
   .catch((err) => {

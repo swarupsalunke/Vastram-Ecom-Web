@@ -19,23 +19,40 @@ router.post("/", protect, adminOnly, async (req, res, next) => {
     const gender = req.body.gender;
     if (!name || !["Men", "Women"].includes(gender)) return res.status(400).json({ message: "Category name and gender are required." });
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-    const category = await Category.create({ name, gender, slug });
+    const requiresSize = typeof req.body.requiresSize === "boolean" ? req.body.requiresSize : !isSizeFreeCategory(name);
+    const category = await Category.create({ name, gender, slug, requiresSize });
     res.status(201).json(category);
   } catch (e) { if (e.code === 11000) return res.status(409).json({ message: "This category already exists for that gender." }); next(e); }
 });
 router.put("/:id", protect, adminOnly, async (req, res, next) => {
   try {
+    const existing = await Category.findById(req.params.id);
+    if (!existing) return res.status(404).json({ message: "Category not found." });
     const updates = {};
     if (req.body.name !== undefined) {
       updates.name = String(req.body.name).trim();
       updates.slug = updates.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     }
     if (req.body.gender !== undefined) updates.gender = req.body.gender;
+    updates.requiresSize = typeof req.body.requiresSize === "boolean"
+      ? req.body.requiresSize
+      : existing.requiresSize ?? !isSizeFreeCategory(updates.name || existing.name);
     const cat = await Category.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
-    if (!cat) return res.status(404).json({ message: "Category not found." });
     const mismatch = await Product.exists({ category: cat._id, gender: { $ne: cat.gender } });
     if (mismatch) return res.status(400).json({ message: "Category gender conflicts with existing products. Update products first." });
-    await Product.updateMany({ category: cat._id }, { categoryName: cat.name });
+    const products = await Product.find({ category: cat._id }).select("_id sizes").lean();
+    if (products.length) {
+      await Product.bulkWrite(products.map(product => ({
+        updateOne: {
+          filter: { _id: product._id },
+          update: { $set: {
+            categoryName: cat.name,
+            requiresSize: cat.requiresSize,
+            ...(!cat.requiresSize ? { sizes: [{ size: "One Size", stock: (product.sizes || []).reduce((total, size) => total + size.stock, 0) }] } : {})
+          } }
+        }
+      })));
+    }
     res.json(cat);
   } catch (e) { next(e); }
 });
@@ -48,4 +65,7 @@ router.delete("/:id", protect, adminOnly, async (req, res, next) => {
     res.json({ message: "Category deleted." });
   } catch (e) { next(e); }
 });
+function isSizeFreeCategory(name) {
+  return /^sarees?$/i.test(String(name || "").trim());
+}
 export default router;

@@ -17,7 +17,7 @@ router.get("/", async (req, res, next) => {
     if (req.query.available === "true") q.sizes = { $elemMatch: { stock: { $gt: 0 } } };
     if (req.query.minPrice || req.query.maxPrice) q.price = { ...(req.query.minPrice ? { $gte: Number(req.query.minPrice) } : {}), ...(req.query.maxPrice ? { $lte: Number(req.query.maxPrice) } : {}) };
     if (req.query.search) q.name = { $regex: String(req.query.search).slice(0, 80), $options: "i" };
-    let query = Product.find(q).populate("category", "name gender").lean();
+    let query = Product.find(q).populate("category", "name gender requiresSize").lean();
     if (req.query.sort === "price-asc") query = query.sort({ price: 1 });
     else if (req.query.sort === "price-desc") query = query.sort({ price: -1 });
     else query = query.sort({ createdAt: -1 });
@@ -25,11 +25,11 @@ router.get("/", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 router.get("/admin/all", protect, adminOnly, async (_req, res, next) => {
-  try { res.json(await Product.find().populate("category", "name gender").sort({ createdAt: -1 })); } catch (e) { next(e); }
+  try { res.json(await Product.find().populate("category", "name gender requiresSize").sort({ createdAt: -1 })); } catch (e) { next(e); }
 });
 router.get("/:id", async (req, res, next) => {
   try {
-    const product = await Product.findOne({ _id: req.params.id, isActive: true }).populate("category", "name gender");
+    const product = await Product.findOne({ _id: req.params.id, isActive: true }).populate("category", "name gender requiresSize");
     if (!product) return res.status(404).json({ message: "Product not found." });
     res.json(product);
   } catch (e) { next(e); }
@@ -40,7 +40,10 @@ router.post("/", protect, adminOnly, async (req, res, next) => {
     const cat = await Category.findById(category);
     if (!cat || cat.gender !== gender) return res.status(400).json({ message: "Choose a category matching the selected gender." });
     if (!name?.trim() || !Number.isFinite(Number(price)) || Number(price) < 0) return res.status(400).json({ message: "Valid product name and price are required." });
-    const product = await Product.create({ ...req.body, name: name.trim(), category: cat._id, categoryName: cat.name, price: Number(price), sizes: normalizeProductSizes(sizes, cat.name), images: normalizeStrings(images) });
+    const normalizedSizes = normalizeSizes(sizes);
+    if (normalizedSizes.error) return res.status(400).json({ message: normalizedSizes.error });
+    const requiresSize = categoryRequiresSize(cat);
+    const product = await Product.create({ ...req.body, name: name.trim(), category: cat._id, categoryName: cat.name, requiresSize, price: Number(price), sizes: normalizeProductSizes(normalizedSizes.sizes, requiresSize), images: normalizeStrings(images) });
     res.status(201).json(product);
   } catch (e) { next(e); }
 });
@@ -48,8 +51,9 @@ router.put("/:id", protect, adminOnly, async (req, res, next) => {
   try {
     const updates = { ...req.body };
     delete updates._id; delete updates.__v;
+    delete updates.requiresSize;
     let current;
-    if (updates.category || updates.gender || updates.sizes) {
+    if (updates.category || updates.gender || updates.sizes !== undefined) {
       current = await Product.findById(req.params.id);
       if (!current) return res.status(404).json({ message: "Product not found." });
     }
@@ -57,9 +61,14 @@ router.put("/:id", protect, adminOnly, async (req, res, next) => {
       const cat = await Category.findById(updates.category || current.category);
       const gender = updates.gender || current.gender;
       if (!cat || cat.gender !== gender) return res.status(400).json({ message: "Category must match product gender." });
-      updates.category = cat._id; updates.categoryName = cat.name;
+      updates.category = cat._id; updates.categoryName = cat.name; updates.requiresSize = categoryRequiresSize(cat);
     }
-    if (updates.sizes) updates.sizes = normalizeProductSizes(updates.sizes, updates.categoryName || current.categoryName);
+    if (updates.sizes !== undefined) {
+      const normalizedSizes = normalizeSizes(updates.sizes);
+      if (normalizedSizes.error) return res.status(400).json({ message: normalizedSizes.error });
+      const requiresSize = updates.requiresSize ?? current.requiresSize ?? !isSizeFreeCategory(current.categoryName);
+      updates.sizes = normalizeProductSizes(normalizedSizes.sizes, requiresSize);
+    }
     if (updates.images) updates.images = normalizeStrings(updates.images);
     const product = await Product.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true }).populate("category", "name gender");
     if (!product) return res.status(404).json({ message: "Product not found." });
@@ -79,12 +88,31 @@ function normalizeStrings(value) {
   return [...new Set(value.map(x => String(x).trim()).filter(Boolean))].slice(0, 30);
 }
 function normalizeSizes(value) {
-  if (!Array.isArray(value)) return [];
-  return value.map(s => ({ size: String(s.size || "").trim(), stock: Math.max(0, Math.floor(Number(s.stock) || 0)) })).filter(s => s.size).slice(0, 30);
+  if (!Array.isArray(value) || !value.length) return { sizes: [], error: "Add at least one size and stock entry." };
+  if (value.length > 30) return { sizes: [], error: "A product can have up to 30 sizes." };
+  const sizes = [];
+  const seen = new Set();
+  for (const item of value) {
+    const size = String(item?.size || "").trim();
+    if (item?.stock === null || item?.stock === undefined || item?.stock === "") return { sizes: [], error: `Enter a stock quantity for ${size || "each size"}.` };
+    const stock = Number(item?.stock);
+    if (!size) return { sizes: [], error: "Every stock entry needs a size name." };
+    if (!Number.isInteger(stock) || stock < 0) return { sizes: [], error: `Stock for ${size} must be a non-negative whole number.` };
+    const key = size.toLowerCase();
+    if (seen.has(key)) return { sizes: [], error: `Size ${size} is listed more than once.` };
+    seen.add(key);
+    sizes.push({ size, stock });
+  }
+  return { sizes, error: "" };
 }
-function normalizeProductSizes(value, categoryName) {
-  const sizes = normalizeSizes(value);
-  if (!/^sarees?$/i.test(String(categoryName || "").trim())) return sizes;
+function normalizeProductSizes(sizes, requiresSize) {
+  if (requiresSize) return sizes;
   return [{ size: "One Size", stock: sizes.reduce((total, item) => total + item.stock, 0) }];
+}
+function categoryRequiresSize(category) {
+  return typeof category.requiresSize === "boolean" ? category.requiresSize : !isSizeFreeCategory(category.name);
+}
+function isSizeFreeCategory(name) {
+  return /^sarees?$/i.test(String(name || "").trim());
 }
 export default router;
