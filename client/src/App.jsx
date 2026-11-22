@@ -347,23 +347,54 @@ function AdminDashboard() {
 function AdminProducts() {
   const { data, loading, error, reload } = useLoad("/products/admin/all");
   const { data: cats } = useLoad("/categories/admin/all");
-  const blank = { name: "", description: "", gender: "Women", category: "", subcategory: "", price: "", compareAtPrice: "", images: "", sizes: "S:0,M:0,L:0", stock: "0", featured: false };
+  const blank = { name: "", description: "", gender: "Women", category: "", subcategory: "", price: "", compareAtPrice: "", images: [], sizes: "S:0,M:0,L:0", stock: "0", featured: false };
   const [form, setForm] = useState(blank);
   const [editing, setEditing] = useState(null);
   const [modal, setModal] = useState(false);
   const [notice, setNotice] = useState("");
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
-  const openNew = () => { setEditing(null); setForm({ ...blank, category: cats.find(c => c.gender === "Women")?._id || "" }); setModal(true); };
-  const edit = p => { setEditing(p._id); setForm({ name: p.name, description: p.description || "", gender: p.gender, category: p.category?._id || p.category, subcategory: p.subcategory || "", price: p.price, compareAtPrice: p.compareAtPrice || "", images: (p.images || []).join(", "), sizes: (p.sizes || []).map(s => `${s.size}:${s.stock}`).join(","), stock: String((p.sizes || []).reduce((total, size) => total + size.stock, 0)), featured: p.featured || false }); setModal(true); };
+  const clearSelectedImages = () => setSelectedImages(current => { current.forEach(image => URL.revokeObjectURL(image.preview)); return []; });
+  const closeModal = () => { clearSelectedImages(); setModal(false); };
+  const openNew = () => { clearSelectedImages(); setEditing(null); setForm({ ...blank, category: cats.find(c => c.gender === "Women")?._id || "" }); setModal(true); };
+  const edit = p => { clearSelectedImages(); setEditing(p._id); setForm({ name: p.name, description: p.description || "", gender: p.gender, category: p.category?._id || p.category, subcategory: p.subcategory || "", price: p.price, compareAtPrice: p.compareAtPrice || "", images: p.images || [], sizes: (p.sizes || []).map(s => `${s.size}:${s.stock}`).join(","), stock: String((p.sizes || []).reduce((total, size) => total + size.stock, 0)), featured: p.featured || false }); setModal(true); };
+  const selectImages = event => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (selectedImages.length + files.length > 10) return setNotice("Could not select more than 10 new images at a time.");
+    if (form.images.length + selectedImages.length + files.length > 30) return setNotice("Could not add more than 30 images to a product.");
+    setNotice("");
+    setSelectedImages(current => [...current, ...files.map(file => ({ file, preview: URL.createObjectURL(file) }))]);
+  };
+  const removeSelectedImage = index => setSelectedImages(current => current.filter((image, imageIndex) => {
+    if (imageIndex !== index) return true;
+    URL.revokeObjectURL(image.preview);
+    return false;
+  }));
   const save = async e => {
-    e.preventDefault(); setNotice("");
+    e.preventDefault(); setNotice(""); setSaving(true);
     const sizeFree = !categoryRequiresSize(cats.find(category => category._id === form.category));
     const sizes = sizeFree ? [{ size: "One Size", stock: Number(form.stock) || 0 }] : form.sizes.split(",").map(x => { const [size, stock] = x.split(":"); return { size: size?.trim(), stock: Number(stock || 0) }; }).filter(x => x.size);
-    const body = { ...form, price: Number(form.price), compareAtPrice: Number(form.compareAtPrice || 0), images: form.images.split(",").map(x => x.trim()).filter(Boolean), sizes };
-    delete body.stock;
-    try { if (editing) await api.put(`/products/${editing}`, body); else await api.post("/products", body); setModal(false); setNotice(editing ? "Product updated." : "Product added."); reload(); } catch (e) { setNotice(`Could not save product: ${e.response?.data?.message || "Please review the product details."}`); }
+    try {
+      let images = [...form.images];
+      if (selectedImages.length) {
+        const upload = new FormData();
+        selectedImages.forEach(image => upload.append("images", image.file));
+        const { data: uploaded } = await api.post("/products/images", upload);
+        images = [...images, ...uploaded.images];
+        setForm(current => ({ ...current, images }));
+        clearSelectedImages();
+      }
+      const body = { ...form, price: Number(form.price), compareAtPrice: Number(form.compareAtPrice || 0), images, sizes };
+      delete body.stock;
+      if (editing) await api.put(`/products/${editing}`, body); else await api.post("/products", body);
+      closeModal(); setNotice(editing ? "Product updated." : "Product added."); reload();
+    } catch (e) {
+      setNotice(`Could not save product: ${e.response?.data?.message || "Please review the product details."}`);
+    } finally { setSaving(false); }
   };
   const remove = async id => { if (!confirm("Remove this product from the storefront? Historical order details will be preserved.")) return; try { await api.delete(`/products/${id}`); setNotice("Product removed from storefront."); reload(); } catch (e) { setNotice(e.response?.data?.message || "Could not remove product."); } };
   const filtered = data.filter(p => `${p.name} ${p.gender} ${p.categoryName} ${p.subcategory || ""}`.toLowerCase().includes(search.toLowerCase()));
@@ -377,17 +408,18 @@ function AdminProducts() {
   return <div><PageTitle title="Product Management" subtitle="Add and manage clothing products." action={<button className="button" onClick={openNew}><Plus size={17} /> Add product</button>} />{notice && <Notice message={notice} type={notice.startsWith("Could") ? "error" : "success"} />}{error && <Notice message={error} type="error" />}
     <div className="toolbar"><div className="search-box"><Search size={17} /><input placeholder="Search products…" value={search} onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} /></div><span className="muted">{filtered.length} products</span></div>
     {loading ? <p>Loading…</p> : <><div className="table-wrap panel"><table><thead><tr><th>Product</th><th>Gender / Category</th><th>Price</th><th>Sizes & stock</th><th>Actions</th></tr></thead><tbody>{paginatedProducts.map(p => <tr key={p._id}><td><div className="table-product"><img src={p.images?.[0] || imageFallback} onError={e => e.currentTarget.src = imageFallback} alt={p.name} /><div><strong>{p.name}</strong><small>{p.isActive ? "Active" : "Archived"}</small></div></div></td><td>{p.gender} / {p.categoryName}{p.subcategory && ` / ${p.subcategory}`}</td><td>{money(p.price)}</td><td>{!productRequiresSize(p) ? `Stock: ${(p.sizes || []).reduce((total, size) => total + size.stock, 0)}` : (p.sizes || []).map(s => `${s.size}: ${s.stock}`).join(" · ")}</td><td><div className="action-row"><button className="icon-button" title="Edit" onClick={() => edit(p)}><Pencil size={16} /></button><button className="icon-button danger" title="Remove" onClick={() => remove(p._id)}><Trash2 size={16} /></button></div></td></tr>)}</tbody></table></div><Pagination currentPage={currentPage} totalItems={filtered.length} pageSize={pageSize} onPageChange={setCurrentPage} /></>}
-    {modal && <Modal title={editing ? "Edit product" : "Add product"} onClose={() => setModal(false)}><form onSubmit={save} className="form-grid">
+    {modal && <Modal title={editing ? "Edit product" : "Add product"} onClose={closeModal}><form onSubmit={save} className="form-grid">
       <label>Product name<input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></label><label>Gender<select value={form.gender} onChange={e => { const gender = e.target.value; setForm({ ...form, gender, category: cats.find(c => c.gender === gender)?._id || "", subcategory: "" }); }}>{["Women", "Men"].map(x => <option key={x}>{x}</option>)}</select></label>
       <label>Category<select required value={form.category} onChange={e => { const nextCategory = cats.find(category => category._id === e.target.value); setForm(current => ({ ...current, category: e.target.value, subcategory: "", stock: !categoryRequiresSize(nextCategory) ? String(stockFromSizeText(current.sizes)) : current.stock })); }}><option value="">Select category</option>{cats.filter(c => c.gender === form.gender).map(c => <option key={c._id} value={c._id}>{c.name}</option>)}</select></label>
       {cats.find(category => category._id === form.category)?.subcategories?.length > 0 && <label>Subcategory<select value={form.subcategory} onChange={e => setForm(current => ({ ...current, subcategory: e.target.value }))}><option value="">None</option>{cats.find(category => category._id === form.category).subcategories.map(subcategory => <option key={subcategory}>{subcategory}</option>)}</select></label>}
       <label>Price (INR)<input required min="0" type="number" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} /></label>
       <label>Compare-at price<input min="0" type="number" value={form.compareAtPrice} onChange={e => setForm({ ...form, compareAtPrice: e.target.value })} /></label>
-      <label className="span-2">Shared image URLs (optional, comma separated)<input value={form.images} onChange={e => setForm({ ...form, images: e.target.value })} placeholder="https://…" /></label>
+      <label className="span-2">Upload product images<input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={selectImages} /><small>JPG, PNG, or WebP; up to 10 files per save, 5 MB each.</small></label>
+      {(form.images.length > 0 || selectedImages.length > 0) && <div className="image-upload-grid span-2">{form.images.map((image, index) => <div className="image-upload-card" key={`${image}-${index}`}><img src={image} alt={`Product image ${index + 1}`} onError={e => { e.currentTarget.src = imageFallback; }} /><button type="button" className="icon-button danger" aria-label="Remove image" onClick={() => setForm(current => ({ ...current, images: current.images.filter((_, imageIndex) => imageIndex !== index) }))}><X size={15} /></button></div>)}{selectedImages.map((image, index) => <div className="image-upload-card" key={image.preview}><img src={image.preview} alt={image.file.name} /><button type="button" className="icon-button danger" aria-label="Remove selected image" onClick={() => removeSelectedImage(index)}><X size={15} /></button></div>)}</div>}
       {!categoryRequiresSize(cats.find(category => category._id === form.category)) ? <label>Stock quantity<input required min="0" type="number" value={form.stock} onChange={e => setForm({ ...form, stock: e.target.value })} /></label> : <label className="span-2">Sizes and stock (comma separated, SIZE:QTY)<input required value={form.sizes} onChange={e => setForm({ ...form, sizes: e.target.value })} placeholder="S:5,M:10,L:8 or 30:5,32:8" /></label>}
       <label className="span-2">Description<textarea rows="3" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></label>
       <label className="checkbox-label span-2"><input type="checkbox" checked={form.featured} onChange={e => setForm({ ...form, featured: e.target.checked })} /> Featured product</label>
-      <div className="form-actions span-2"><button type="button" className="button secondary" onClick={() => setModal(false)}>Cancel</button><button className="button">{editing ? "Save changes" : "Add product"}</button></div>
+      <div className="form-actions span-2"><button type="button" className="button secondary" disabled={saving} onClick={closeModal}>Cancel</button><button className="button" disabled={saving}>{saving ? "Saving…" : editing ? "Save changes" : "Add product"}</button></div>
     </form></Modal>}
   </div>;
 }
