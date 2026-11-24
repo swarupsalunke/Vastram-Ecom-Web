@@ -13,6 +13,7 @@ import paymentRoutes from "./src/routes/paymentRoutes.js";
 import adminRoutes from "./src/routes/adminRoutes.js";
 import couponRoutes from "./src/routes/couponRoutes.js";
 import messageRoutes from "./src/routes/messageRoutes.js";
+import heroBannerRoutes from "./src/routes/heroBannerRoutes.js";
 import { expirePendingInventoryReservations } from "./src/utils/inventory.js";
 
 dotenv.config();
@@ -51,6 +52,7 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/coupons", couponRoutes);
 app.use("/api/messages", messageRoutes);
+app.use("/api/hero-banners", heroBannerRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error(err);
