@@ -120,6 +120,109 @@ button:disabled {
     color: var(--text)
 }
 
+.cart-icon-wrap,
+.notification-icon-wrap {
+    position: relative;
+    display: inline-flex;
+}
+
+.cart-count-badge,
+.notification-count-badge {
+    position: absolute;
+    top: -8px;
+    right: -9px;
+    min-width: 17px;
+    height: 17px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+    border: 2px solid #fff;
+    border-radius: 999px;
+    background: var(--orange);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.notification-menu {
+    position: relative;
+}
+
+.notification-button {
+    padding: 4px;
+    cursor: pointer;
+}
+
+.notification-dropdown {
+    position: absolute;
+    top: calc(100% + 15px);
+    right: -12px;
+    z-index: 40;
+    width: min(360px, calc(100vw - 24px));
+    max-height: min(480px, calc(100vh - 100px));
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 14px 36px rgba(20, 25, 35, .16);
+}
+
+.notification-dropdown h2 {
+    margin: 0;
+    padding: 15px 16px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    font-size: 15px;
+}
+
+.notification-list {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.notification-item {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    white-space: normal;
+}
+
+.notification-item:hover,
+.notification-item:focus-visible {
+    background: #fafafa;
+}
+
+.notification-item.unread {
+    background: #fff8f2;
+}
+
+.notification-item strong {
+    font-size: 13px;
+}
+
+.notification-item span,
+.notification-item small {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.notification-empty,
+.notification-error {
+    margin: 0;
+    padding: 16px;
+    font-size: 13px;
+}
+
+.notification-error {
+    color: var(--red);
+}
+
 .button {
     display: inline-flex;
     align-items: center;

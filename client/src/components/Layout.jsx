@@ -3,6 +3,7 @@ import { ShoppingBag, UserRound, LogOut, LayoutDashboard, Package, Tags, Warehou
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
+import NotificationBell from "./NotificationBell";
 
 const adminLinks = [
   ["/admin/dashboard", "Dashboard", LayoutDashboard],
@@ -51,13 +52,18 @@ export default function Layout({ children }) {
 
         <nav className="top-actions">
           {!admin && (
-            <Link to="/cart" className="top-link">
-              <ShoppingBag size={18} /> Cart ({count})
+            <Link to="/cart" className="top-link" aria-label={`Cart, ${count} item${count === 1 ? "" : "s"}`}>
+              <span className="cart-icon-wrap">
+                <ShoppingBag size={18} />
+                {count > 0 && <span className="cart-count-badge">{count > 99 ? "99+" : count}</span>}
+              </span>
+              <span>Cart</span>
             </Link>
           )}
 
           {user ? (
             <>
+              {!admin && <NotificationBell userId={user.id} />}
               {admin ? (
                 <Link to="/admin/dashboard" className="top-link">
                   <LayoutDashboard size={18} /> Admin
