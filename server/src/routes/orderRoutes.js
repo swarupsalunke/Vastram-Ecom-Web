@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
 import Coupon from "../models/Coupon.js";
+import DeliveryMessage from "../models/DeliveryMessage.js";
 import { protect, adminOnly } from "../middleware/auth.js";
 import orderNumber from "../utils/orderNumber.js";
 import { decrementOrderInventory, InventoryUnavailableError, restoreOrderInventory, withInventoryTransaction } from "../utils/inventory.js";
@@ -142,6 +143,12 @@ router.patch("/:id/status", protect, adminOnly, async (req, res, next) => {
           cancelledOrder.cancelledAt = new Date();
           cancelledOrder.cancellationReason = String(req.body.deliveryMessage || "Cancelled by admin").slice(0, 300);
           await cancelledOrder.save({ session });
+          await createStatusNotification(
+            cancelledOrder,
+            "Cancelled",
+            cancelledOrder.cancellationReason,
+            session
+          );
         });
       } catch (e) {
         if (e instanceof OrderActionError) return res.status(e.status).json({ message: e.message });
@@ -149,16 +156,42 @@ router.patch("/:id/status", protect, adminOnly, async (req, res, next) => {
       }
       return res.json(cancelledOrder);
     }
-    const order = await Order.findById(req.params.id);
-    if (!order) return res.status(404).json({ message: "Order not found." });
-    if (order.status === "Cancelled") return res.status(400).json({ message: "Cancelled orders cannot be advanced." });
-    order.status = req.body.status;
-    if (req.body.deliveryMessage !== undefined) order.deliveryMessage = String(req.body.deliveryMessage).slice(0, 1000);
-    if (order.paymentMethod === "COD" && req.body.status === "Delivered") order.paymentStatus = "Paid";
-    await order.save();
-    res.json(order);
+    let updatedOrder;
+    try {
+      await withInventoryTransaction(async session => {
+        const order = await Order.findById(req.params.id).session(session);
+        if (!order) throw new OrderActionError(404, "Order not found.");
+        if (order.status === "Cancelled") throw new OrderActionError(400, "Cancelled orders cannot be advanced.");
+        const previousStatus = order.status;
+        order.status = req.body.status;
+        const statusDetails = req.body.deliveryMessage === undefined
+          ? ""
+          : String(req.body.deliveryMessage).slice(0, 1000);
+        if (req.body.deliveryMessage !== undefined) order.deliveryMessage = statusDetails;
+        if (order.paymentMethod === "COD" && req.body.status === "Delivered") order.paymentStatus = "Paid";
+        await order.save({ session });
+        if (previousStatus !== order.status) {
+          await createStatusNotification(order, order.status, statusDetails, session);
+        }
+        updatedOrder = order;
+      });
+    } catch (e) {
+      if (e instanceof OrderActionError) return res.status(e.status).json({ message: e.message });
+      throw e;
+    }
+    res.json(updatedOrder);
   } catch (e) { next(e); }
 });
+async function createStatusNotification(order, status, details, session) {
+  const detail = String(details || "").trim();
+  const message = `Your order ${order.orderNumber} is now ${status}.${detail ? ` ${detail}` : ""}`;
+  await DeliveryMessage.create([{
+    order: order._id,
+    customer: order.customer,
+    title: `Order update: ${status}`,
+    message
+  }], { session });
+}
 class OrderActionError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }

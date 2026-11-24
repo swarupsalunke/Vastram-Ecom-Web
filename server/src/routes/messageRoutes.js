@@ -9,6 +9,15 @@ router.get("/mine", protect, async (req, res, next) => {
 router.get("/admin/all", protect, adminOnly, async (_req, res, next) => {
   try { res.json(await DeliveryMessage.find().populate("order", "orderNumber").populate("customer", "name email").sort({ createdAt: -1 })); } catch (e) { next(e); }
 });
+router.patch("/read-all", protect, async (req, res, next) => {
+  try {
+    const result = await DeliveryMessage.updateMany(
+      { customer: req.user._id, readAt: null },
+      { $set: { readAt: new Date() } }
+    );
+    res.json({ message: "Notifications marked as read.", modifiedCount: result.modifiedCount });
+  } catch (e) { next(e); }
+});
 router.post("/", protect, adminOnly, async (req, res, next) => {
   try {
     const order = await Order.findById(req.body.orderId);

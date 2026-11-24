@@ -2,6 +2,7 @@ import { Router } from "express";
 import crypto from "crypto";
 import Razorpay from "razorpay";
 import Order from "../models/Order.js";
+import DeliveryMessage from "../models/DeliveryMessage.js";
 import { protect } from "../middleware/auth.js";
 import { decrementOrderInventory, InventoryUnavailableError, withInventoryTransaction } from "../utils/inventory.js";
 const router = Router();
@@ -124,6 +125,12 @@ async function settlePayment(orderId, paymentOrderId, paymentId) {
       order.inventoryStatus = "deducted";
       order.inventoryReservationExpiresAt = undefined;
       await order.save({ session });
+      await DeliveryMessage.create([{
+        order: order._id,
+        customer: order.customer,
+        title: "Order confirmed",
+        message: `Payment received and order ${order.orderNumber} is confirmed.`
+      }], { session });
       result = { order, review: false };
     });
   } catch (e) {
