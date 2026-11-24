@@ -11,8 +11,8 @@ export default defineConfig({
         name: "Vastram Clothing Store",
         short_name: "Vastram",
         description: "Shop clothing online",
-        theme_color: "#f07824",
-        background_color: "#ffffff",
+        theme_color: "#f7f6f2",
+        background_color: "#f7f6f2",
         display: "standalone",
         start_url: "/",
         icons: [

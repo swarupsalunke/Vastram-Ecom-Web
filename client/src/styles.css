@@ -1,18 +1,18 @@
 :root {
     font-family: 'Saira', sans-serif;
-    color: #263449;
-    background: #f7f8fa;
+    color: #171717;
+    background: #f7f6f2;
     font-synthesis: none;
     text-rendering: optimizeLegibility;
-    --orange: #f07824;
-    --orange-dark: #d96312;
-    --orange-light: #fff3e8;
-    --text: #263449;
-    --muted: #718096;
-    --border: #e7ebf1;
+    --orange: #171717;
+    --orange-dark: #000;
+    --orange-light: #eeede8;
+    --text: #171717;
+    --muted: #707070;
+    --border: #e5e3dd;
     --white: #fff;
-    --green: #16835f;
-    --red: #c43b3b
+    --green: #333;
+    --red: #333
 }
 
 h1,
@@ -166,7 +166,7 @@ button:disabled {
     border: 1px solid var(--border);
     border-radius: 12px;
     background: #fff;
-    box-shadow: 0 14px 36px rgba(20, 25, 35, .16);
+    box-shadow: 0 14px 36px rgba(17, 17, 17, .16);
 }
 
 .notification-dropdown h2 {
@@ -194,11 +194,11 @@ button:disabled {
 
 .notification-item:hover,
 .notification-item:focus-visible {
-    background: #fafafa;
+    background: #f7f6f2;
 }
 
 .notification-item.unread {
-    background: #fff8f2;
+    background: #f7f6f2;
 }
 
 .notification-item strong {
@@ -283,7 +283,7 @@ button:disabled {
 
 .hero {
     min-height: 440px;
-    background: #f9e9db;
+    background: #eeede8;
     border-radius: 18px;
     margin: 20px 0 55px;
     display: grid;
@@ -313,19 +313,19 @@ button:disabled {
 .hero h1 em {
     font-family: 'Playfair Display', serif;
     font-weight: 500;
-    color: #a64f1a
+    color: #292929
 }
 
 .hero p {
     max-width: 390px;
     line-height: 1.8;
-    color: #6e5b50;
+    color: #55534e;
     margin: 0 0 26px
 }
 
 .hero-art {
     position: relative;
-    background: linear-gradient(135deg, #e7bda0, #f6dfca);
+    background: linear-gradient(135deg, #d8d6cf, #f7f6f2);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -336,8 +336,8 @@ button:disabled {
     width: min(65%, 330px);
     aspect-ratio: 1;
     border-radius: 50%;
-    background: linear-gradient(135deg, #b76a44, #e9c2a2);
-    box-shadow: inset -18px -12px 35px #8d4b3030;
+    background: linear-gradient(135deg, #242424, #777670);
+    box-shadow: inset -18px -12px 35px #11111130;
     position: relative
 }
 
@@ -348,7 +348,7 @@ button:disabled {
     height: 65%;
     left: 28%;
     top: 18%;
-    background: #fff5e9;
+    background: #f7f6f2;
     border-radius: 38% 38% 12% 12%;
     clip-path: polygon(25% 0, 75% 0, 100% 25%, 83% 42%, 73% 30%, 73% 100%, 27% 100%, 27% 30%, 17% 42%, 0 25%)
 }
@@ -433,7 +433,7 @@ button:disabled {
     font-size: 12px;
     font-weight: 700;
     margin-bottom: 14px;
-    color: #4c596c
+    color: #454545
 }
 
 .input,
@@ -442,7 +442,7 @@ select,
 textarea {
     width: 100%;
     min-width: 0;
-    border: 1px solid #dfe4eb;
+    border: 1px solid #dedcd6;
     background: #fff;
     color: var(--text);
     border-radius: 7px;
@@ -460,8 +460,8 @@ textarea {
 input:focus,
 select:focus,
 textarea:focus {
-    border-color: #f3a36d;
-    box-shadow: 0 0 0 3px #f0782414
+    border-color: #777670;
+    box-shadow: 0 0 0 3px #17171714
 }
 
 textarea {
@@ -504,7 +504,7 @@ textarea {
 .product-image {
     height: 240px;
     position: relative;
-    background: #f0f0ee
+    background: #eeede8
 }
 
 .product-image img {
@@ -553,7 +553,7 @@ textarea {
     aspect-ratio: 4 / 5;
     overflow: hidden;
     border-radius: 10px;
-    background: #f0f0ee
+    background: #eeede8
 }
 
 .detail-main-image img,
@@ -597,7 +597,7 @@ textarea {
     overflow: hidden;
     border: 1px solid var(--border);
     border-radius: 8px;
-    background: #f0f0ee
+    background: #eeede8
 }
 
 .image-upload-card img {
@@ -636,7 +636,7 @@ textarea {
 }
 
 .detail-price del {
-    color: #99a1ac;
+    color: #888;
     font-size: 14px
 }
 
@@ -730,7 +730,7 @@ textarea {
 
 .price-row del {
     font-size: 12px;
-    color: #99a1ac
+    color: #888
 }
 
 .product-options {
@@ -800,7 +800,7 @@ textarea {
     border: 1px solid var(--border);
     border-radius: 16px;
     padding: 34px;
-    box-shadow: 0 12px 40px #2430440a
+    box-shadow: 0 12px 40px #1717170a
 }
 
 .auth-card h1 {
@@ -833,21 +833,21 @@ textarea {
 }
 
 .notice.error {
-    background: #fff0f0;
-    color: #a72d2d;
-    border: 1px solid #f4caca
+    background: #eeede8;
+    color: #292929;
+    border: 1px solid #d8d6cf
 }
 
 .notice.success {
-    background: #eaf8f1;
-    color: #166d4c;
-    border: 1px solid #bfe8d4
+    background: #eeede8;
+    color: #292929;
+    border: 1px solid #d8d6cf
 }
 
 .notice.info {
-    background: #edf5ff;
-    color: #255e9b;
-    border: 1px solid #cfe2fa
+    background: #eeede8;
+    color: #292929;
+    border: 1px solid #d8d6cf
 }
 
 .cart-list {
@@ -989,8 +989,8 @@ textarea {
 }
 
 .table-wrap th {
-    background: #f8f9fb;
-    color: #637086;
+    background: #f2f1ed;
+    color: #555;
     text-align: left;
     font-size: 10px;
     text-transform: uppercase;
@@ -1000,7 +1000,7 @@ textarea {
 .table-wrap td,
 .table-wrap th {
     padding: 13px 14px;
-    border-bottom: 1px solid #edf0f4;
+    border-bottom: 1px solid #e8e6e0;
     vertical-align: top
 }
 
@@ -1053,7 +1053,7 @@ textarea {
 }
 
 .icon-button:hover {
-    background: #f8f9fb
+    background: #f2f1ed
 }
 
 .icon-button.danger {
@@ -1062,8 +1062,8 @@ textarea {
 
 .status {
     display: inline-block;
-    background: #f0f3f7;
-    color: #4b5b70;
+    background: #eeede8;
+    color: #454545;
     padding: 5px 7px;
     border-radius: 5px;
     font-size: 10px;
@@ -1072,18 +1072,18 @@ textarea {
 }
 
 .status.delivered {
-    background: #e8f7ef;
-    color: #14774f
+    background: #deddd7;
+    color: #171717
 }
 
 .status.cancelled {
-    background: #fff0f0;
-    color: #b33131
+    background: #fff;
+    color: #171717
 }
 
 .status.paid {
-    background: #e8f7ef;
-    color: #14774f
+    background: #deddd7;
+    color: #171717
 }
 
 .table-subtext {
@@ -1110,7 +1110,7 @@ textarea {
 .sidebar-label {
     font-size: 10px;
     letter-spacing: 1.5px;
-    color: #8b95a4;
+    color: #707070;
     font-weight: 700;
     padding: 4px 12px 14px
 }
@@ -1121,13 +1121,13 @@ textarea {
     gap: 12px;
     padding: 11px 12px;
     border-radius: 8px;
-    color: #586579;
+    color: #555;
     font-size: 12px;
     font-weight: 600
 }
 
 .nav-link:hover {
-    background: #f8f9fb;
+    background: #f2f1ed;
     color: var(--text)
 }
 
@@ -1154,7 +1154,7 @@ textarea {
     flex: 1;
     min-width: 0;
     padding: 30px clamp(18px, 3vw, 42px);
-    background: #f7f8fa;
+    background: #f7f6f2;
     overflow: hidden
 }
 
@@ -1229,7 +1229,7 @@ textarea {
 .modal-backdrop {
     position: fixed;
     inset: 0;
-    background: #18233380;
+    background: #17171780;
     z-index: 50;
     display: grid;
     place-items: center;
@@ -1512,7 +1512,7 @@ textarea {
         width: 270px;
         transform: translateX(-105%);
         transition: transform .2s;
-        box-shadow: 8px 0 30px #18233312
+        box-shadow: 8px 0 30px #17171712
     }
 
     .sidebar.sidebar-open {
@@ -1771,7 +1771,7 @@ textarea {
 
 .pagination-info,
 .pagination-page {
-  color: #718096;
+  color: #707070;
   font-size: 14px;
 }
 
@@ -1830,7 +1830,7 @@ textarea {
     padding: 8px 16px;
     background: #fff;
     border-bottom: 1px solid var(--border);
-    box-shadow: 0 12px 24px #18233312;
+    box-shadow: 0 12px 24px #17171712;
   }
 
   .info-nav.info-nav-open {
