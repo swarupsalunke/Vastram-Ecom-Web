@@ -14,7 +14,7 @@ import TermsConditions from "./pages/TermsConditions";
 import ShippingPolicy from "./pages/ShippingPolicy";
 import ReturnPolicy from "./pages/ReturnPolicy";
 import RefundPolicy from "./pages/RefundPolicy";
-import { Search, SlidersHorizontal, Plus, Pencil, Trash2, Package, ShoppingBag, Users, IndianRupee, X, Warehouse, Eye, CheckCircle, Clock, Truck, MessageSquare, TicketPercent, ArrowLeft } from "lucide-react";
+import { Search, SlidersHorizontal, Plus, Pencil, Trash2, Package, ShoppingBag, Users, IndianRupee, X, Warehouse, Eye, CheckCircle, Clock, Truck, MessageSquare, TicketPercent, ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 
 const money = n => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(Number(n || 0));
 const imageFallback = "https://placehold.co/600x750/f6f6f6/777?text=Vastram";
@@ -35,14 +35,24 @@ function Home() {
   const [params, setParams] = useSearchParams();
   const [filters, setFilters] = useState({ gender: params.get("gender") || "", category: params.get("category") || "", subcategory: params.get("subcategory") || "", size: params.get("size") || "", minPrice: params.get("minPrice") || "", maxPrice: params.get("maxPrice") || "", search: params.get("search") || "", sort: params.get("sort") || "" });
   const [categories, setCategories] = useState([]);
+  const [activeHeroImage, setActiveHeroImage] = useState(0);
   const { add } = useCart();
   const { data: products, loading, error } = useLoad("/products?" + new URLSearchParams(Object.fromEntries(Object.entries(filters).filter(([, v]) => v))), [JSON.stringify(filters)]);
+  const { data: heroBanner, error: heroBannerError } = useLoad("/hero-banners");
+  const heroImages = heroBanner.images || [];
   useEffect(() => { api.get("/categories").then(r => setCategories(r.data)).catch(() => setCategories([])); }, []);
+  useEffect(() => { setActiveHeroImage(0); }, [heroImages.length, heroImages[0]]);
+  useEffect(() => {
+    if (heroImages.length < 2) return undefined;
+    const timer = window.setInterval(() => setActiveHeroImage(current => (current + 1) % heroImages.length), 5000);
+    return () => window.clearInterval(timer);
+  }, [heroImages.length]);
   const change = (k, v) => setFilters(p => ({ ...p, [k]: v, ...(k === "gender" ? { category: "", subcategory: "" } : {}), ...(k === "category" ? { subcategory: "" } : {}) }));
   const clear = () => setFilters({ gender: "", category: "", subcategory: "", size: "", minPrice: "", maxPrice: "", search: "", sort: "" });
   const selectedCategory = categories.find(category => category._id === filters.category);
   return <div className="page">
-    <section className="hero"><div><span className="eyebrow">THE NEW SEASON EDIT</span><h1>Find your<br /><em>everyday style.</em></h1><p>Thoughtful essentials for men and women. Discover pieces you’ll reach for again and again.</p><a href="#shop" className="button">Explore collection</a></div><div className="hero-art"><div className="hero-circle"></div><div className="hero-caption">NEW ARRIVALS<br /><strong>STYLE YOUR WAY</strong></div></div></section>
+    {heroBannerError && <Notice message={`Home banner could not be loaded: ${heroBannerError}`} type="error" />}
+    <section className="hero"><div><span className="eyebrow">THE NEW SEASON EDIT</span><h1>Find your<br /><em>everyday style.</em></h1><p>Thoughtful essentials for men and women. Discover pieces you’ll reach for again and again.</p><a href="#shop" className="button">Explore collection</a></div><div className={`hero-art ${heroImages.length ? "hero-art-with-image" : ""}`}>{heroImages.length ? <><img className="hero-banner-image" src={heroImages[activeHeroImage]} alt="Vastram featured collection" onError={e => { e.currentTarget.src = imageFallback; }} />{heroImages.length > 1 && <div className="hero-banner-controls"><button type="button" aria-label="Previous banner" onClick={() => setActiveHeroImage(current => (current - 1 + heroImages.length) % heroImages.length)}><ChevronLeft size={18} /></button>{heroImages.map((image, index) => <button key={`${image}-${index}`} type="button" className={`hero-banner-dot ${index === activeHeroImage ? "active" : ""}`} aria-label={`Show banner ${index + 1}`} aria-pressed={index === activeHeroImage} onClick={() => setActiveHeroImage(index)} />)}<button type="button" aria-label="Next banner" onClick={() => setActiveHeroImage(current => (current + 1) % heroImages.length)}><ChevronRight size={18} /></button></div>}</> : <><div className="hero-circle"></div><div className="hero-caption">NEW ARRIVALS<br /><strong>STYLE YOUR WAY</strong></div></>}</div></section>
     <div id="shop" className="section-heading"><div><span className="eyebrow">CURATED FOR YOU</span><h2>Shop the collection</h2></div><span className="muted">{products.length} products</span></div>
     <div className="shop-layout">
       <aside className="filter-panel"><div className="filter-head"><h3><SlidersHorizontal size={17} /> Filters</h3><button className="text-button" onClick={clear}>Reset</button></div>
@@ -551,6 +561,84 @@ function AdminReports() {
   };
   return <div><PageTitle title="Reports & Analytics" subtitle="Order summaries and downloadable CSV." action={<button className="button" onClick={csv}>Export orders CSV</button>} />{error && <Notice message={error} type="error" />}<div className="stats-grid"><div className="stat-card"><span>All orders</span><strong>{loading ? "…" : data.length}</strong></div><div className="stat-card"><span>Paid orders</span><strong>{loading ? "…" : paid.length}</strong></div><div className="stat-card"><span>Paid revenue</span><strong>{loading ? "…" : money(paid.reduce((s, o) => s + o.total, 0))}</strong></div></div><p className="muted">Revenue shown here is based on orders marked Paid. COD payment is marked paid by the admin when the order is marked Delivered.</p></div>;
 }
+function AdminHeroBanners() {
+  const [images, setImages] = useState([]);
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [notice, setNotice] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    api.get("/hero-banners").then(({ data }) => {
+      if (active) setImages(data.images || []);
+    }).catch(error => {
+      if (active) setLoadError(error.response?.data?.message || "Could not load home banner settings.");
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
+
+  const clearSelectedImages = () => setSelectedImages(current => {
+    current.forEach(image => URL.revokeObjectURL(image.preview));
+    return [];
+  });
+  const selectImages = event => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (images.length + selectedImages.length + files.length > 10) {
+      setNotice({ message: "A maximum of 10 banner images is allowed.", type: "error" });
+      return;
+    }
+    setNotice(null);
+    setSelectedImages(current => [...current, ...files.map(file => ({ file, preview: URL.createObjectURL(file) }))]);
+  };
+  const removeSelectedImage = index => setSelectedImages(current => current.filter((image, imageIndex) => {
+    if (imageIndex !== index) return true;
+    URL.revokeObjectURL(image.preview);
+    return false;
+  }));
+  const save = async () => {
+    setSaving(true);
+    setNotice(null);
+    try {
+      let nextImages = images;
+      if (selectedImages.length) {
+        const upload = new FormData();
+        selectedImages.forEach(image => upload.append("images", image.file));
+        const { data: uploaded } = await api.post("/products/images", upload);
+        nextImages = [...images, ...uploaded.images];
+        setImages(nextImages);
+        clearSelectedImages();
+      }
+      const { data } = await api.put("/hero-banners", { images: nextImages });
+      setImages(data.images);
+      setNotice({ message: "Home banner updated.", type: "success" });
+    } catch (error) {
+      setNotice({ message: error.response?.data?.message || "Could not update the home banner.", type: "error" });
+    } finally {
+      setSaving(false);
+    }
+  };
+  const removeImage = index => setImages(current => current.filter((_, imageIndex) => imageIndex !== index));
+  const allImages = [
+    ...images.map((src, index) => ({ src, key: `saved-${src}-${index}`, savedIndex: index })),
+    ...selectedImages.map((image, index) => ({ src: image.preview, key: image.preview, selectedIndex: index }))
+  ];
+
+  return <div>
+    <PageTitle title="Home Banners" subtitle="Upload and manage the images shown in the storefront hero." />
+    {loadError && <Notice message={loadError} type="error" />}
+    {notice && <Notice message={notice.message} type={notice.type} />}
+    <section className="panel form-stack">
+      <label>Upload banner images<input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={loading || saving || Boolean(loadError)} onChange={selectImages} /><small>JPG, PNG, or WebP; up to 10 banner images, 5 MB each. Multiple images rotate automatically on the storefront.</small></label>
+      {loading ? <p className="muted">Loading banner settings…</p> : allImages.length ? <div className="image-upload-grid hero-banner-upload-grid">{allImages.map(image => <div className="image-upload-card" key={image.key}><img src={image.src} alt="Home banner preview" onError={e => { e.currentTarget.src = imageFallback; }} /><button type="button" className="icon-button danger" disabled={saving} aria-label="Remove banner image" onClick={() => image.savedIndex !== undefined ? removeImage(image.savedIndex) : removeSelectedImage(image.selectedIndex)}><X size={15} /></button></div>)}</div> : <p className="muted">No banner images yet. The storefront will show its default hero artwork until you add one.</p>}
+      {!loading && !loadError && <button className="button" disabled={saving} onClick={save}>{saving ? "Saving…" : "Save banner images"}</button>}
+    </section>
+  </div>;
+}
 function AdminSettings() {
   const { user, setUser } = useAuth(); const [name, setName] = useState(user?.name || ""); const [phone, setPhone] = useState(user?.phone || ""); const [notice, setNotice] = useState("");
   const save = async e => { e.preventDefault(); try { const { data } = await api.patch("/auth/profile", { name, phone }); setUser(data.user); localStorage.setItem("vastram_user", JSON.stringify(data.user)); setNotice("Admin profile updated."); } catch (e) { setNotice(e.response?.data?.message || "Could not update profile."); } };
@@ -576,6 +664,7 @@ export default function App() {
     <Route path="/admin/messages" element={<AdminOnly><AdminMessages /></AdminOnly>} />
     <Route path="/admin/coupons" element={<AdminOnly><AdminCoupons /></AdminOnly>} />
     <Route path="/admin/reports" element={<AdminOnly><AdminReports /></AdminOnly>} />
+    <Route path="/admin/banners" element={<AdminOnly><AdminHeroBanners /></AdminOnly>} />
     <Route path="/admin/settings" element={<AdminOnly><AdminSettings /></AdminOnly>} />
     <Route path="/about" element={<AboutUs />} />
     <Route path="/contact" element={<ContactUs />} />

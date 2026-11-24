@@ -332,6 +332,60 @@ button:disabled {
     min-height: 320px
 }
 
+.hero-art-with-image {
+    background: #171717
+}
+
+.hero-banner-image {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover
+}
+
+.hero-banner-controls {
+    position: absolute;
+    z-index: 1;
+    bottom: 18px;
+    left: 50%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px;
+    border-radius: 999px;
+    background: #17171780;
+    transform: translateX(-50%)
+}
+
+.hero-banner-controls button {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: #fff
+}
+
+.hero-banner-controls button:hover,
+.hero-banner-controls button:focus-visible {
+    background: #ffffff30
+}
+
+.hero-banner-controls .hero-banner-dot {
+    width: 8px;
+    height: 8px;
+    background: #ffffff80
+}
+
+.hero-banner-controls .hero-banner-dot.active {
+    background: #fff
+}
+
 .hero-circle {
     width: min(65%, 330px);
     aspect-ratio: 1;
@@ -589,6 +643,15 @@ textarea {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
     gap: 10px
+}
+
+.hero-banner-upload-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    max-width: 900px
+}
+
+.hero-banner-upload-grid .image-upload-card {
+    aspect-ratio: 16 / 9
 }
 
 .image-upload-card {

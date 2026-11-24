@@ -1,5 +1,5 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { ShoppingBag, UserRound, LogOut, LayoutDashboard, Package, Tags, Warehouse, ClipboardList, CreditCard, Users, MessageSquare, TicketPercent, BarChart3, Settings, Menu, X, Instagram, Mail } from "lucide-react";
+import { ShoppingBag, UserRound, LogOut, LayoutDashboard, Package, Tags, Warehouse, ClipboardList, CreditCard, Users, MessageSquare, TicketPercent, BarChart3, Settings, Menu, X, Instagram, Mail, Images } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
@@ -7,6 +7,7 @@ import NotificationBell from "./NotificationBell";
 
 const adminLinks = [
   ["/admin/dashboard", "Dashboard", LayoutDashboard],
+  ["/admin/banners", "Home Banners", Images],
   ["/admin/products", "Product Management", Package],
   ["/admin/categories", "Categories", Tags],
   ["/admin/inventory", "Inventory / Stock", Warehouse],
