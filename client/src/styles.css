@@ -1240,7 +1240,7 @@ textarea {
 
 .store-footer-main {
     display: grid;
-    grid-template-columns: 1.5fr repeat(3, 1fr);
+    grid-template-columns: 1.5fr repeat(4, 1fr);
     gap: 36px;
     padding: 38px 0 30px;
 }
@@ -1282,6 +1282,44 @@ textarea {
 
 .store-footer-group a:hover,
 .store-footer-group a:focus-visible {
+    color: var(--orange-dark);
+}
+
+.store-footer-contact a {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.contact-info {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 28px;
+}
+
+.contact-item {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    background: #fff;
+}
+
+.contact-item h2 {
+    margin: 0 0 12px;
+    font-size: 15px;
+}
+
+.contact-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text);
+    overflow-wrap: anywhere;
+}
+
+.contact-link:hover,
+.contact-link:focus-visible {
     color: var(--orange-dark);
 }
 
@@ -1498,6 +1536,10 @@ textarea {
 
     .auth-card {
         padding: 25px
+    }
+
+    .contact-info {
+        grid-template-columns: 1fr;
     }
 
     .cart-item {

@@ -54,7 +54,7 @@ function Home() {
         <div className="two-input"><label>Min price<input type="number" min="0" value={filters.minPrice} onChange={e => change("minPrice", e.target.value)} placeholder="₹ 0" /></label><label>Max price<input type="number" min="0" value={filters.maxPrice} onChange={e => change("maxPrice", e.target.value)} placeholder="₹ 5000" /></label></div>
         <label>Sort by<select value={filters.sort} onChange={e => change("sort", e.target.value)}><option value="">Newest</option><option value="price-asc">Price: Low to high</option><option value="price-desc">Price: High to low</option></select></label>
       </aside>
-        <section className="product-results">{error && <Notice message={error} type="error" />}{loading ? <p>Loading products…</p> : products.length ? <div className="product-grid">{products.map(p => <ProductCard key={p._id} product={p} onAdd={add} />)}</div> : <div className="empty"><Package size={32} /><h3>No products found</h3><p>Try changing or resetting your filters.</p></div>}</section>
+      <section className="product-results">{error && <Notice message={error} type="error" />}{loading ? <p>Loading products…</p> : products.length ? <div className="product-grid">{products.map(p => <ProductCard key={p._id} product={p} onAdd={add} />)}</div> : <div className="empty"><Package size={32} /><h3>No products found</h3><p>Try changing or resetting your filters.</p></div>}</section>
     </div>
   </div>;
 }

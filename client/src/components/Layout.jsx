@@ -1,5 +1,5 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { ShoppingBag, UserRound, LogOut, LayoutDashboard, Package, Tags, Warehouse, ClipboardList, CreditCard, Users, MessageSquare, TicketPercent, BarChart3, Settings, Menu, X } from "lucide-react";
+import { ShoppingBag, UserRound, LogOut, LayoutDashboard, Package, Tags, Warehouse, ClipboardList, CreditCard, Users, MessageSquare, TicketPercent, BarChart3, Settings, Menu, X, Instagram, Mail } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
@@ -142,6 +142,19 @@ export default function Layout({ children }) {
               <h2>Legal</h2>
               <Link to="/privacy-policy">Privacy Policy</Link>
               <Link to="/terms-and-conditions">Terms & Conditions</Link>
+            </div>
+
+            <div className="store-footer-group store-footer-contact">
+              <h2>Contact Us</h2>
+              <a href="mailto:swarupsalunke01@gmail.com">
+                <Mail size={14} /> Email us
+              </a>
+              <a href="https://wa.me/919529624837" target="_blank" rel="noreferrer">
+                <MessageSquare size={14} /> WhatsApp
+              </a>
+              <a href="https://www.instagram.com/salunkeswarup8/" target="_blank" rel="noreferrer">
+                <Instagram size={14} /> Instagram
+              </a>
             </div>
           </div>
 

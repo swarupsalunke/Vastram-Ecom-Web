@@ -1,4 +1,6 @@
 
+import { Instagram, Mail, MessageSquare } from "lucide-react";
+
 export default function ContactUs() {
   return (
     <div className="page policy-page">
@@ -23,12 +25,36 @@ export default function ContactUs() {
 
           <div className="contact-item">
             <h2>Email</h2>
-            <p>YOUR_SUPPORT_EMAIL</p>
+            <a href="mailto:swarupsalunke01@gmail.com" className="contact-link">
+              <Mail size={18} />
+              swarupsalunke01@gmail.com
+            </a>
           </div>
 
           <div className="contact-item">
-            <h2>Phone</h2>
-            <p>YOUR_SUPPORT_PHONE</p>
+            <h2>WhatsApp</h2>
+            <a
+              href="https://wa.me/919529624837"
+              target="_blank"
+              rel="noreferrer"
+              className="contact-link"
+            >
+              <MessageSquare size={18} />
+              Chat on WhatsApp
+            </a>
+          </div>
+
+          <div className="contact-item">
+            <h2>Instagram</h2>
+            <a
+              href="https://www.instagram.com/salunkeswarup8/"
+              target="_blank"
+              rel="noreferrer"
+              className="contact-link"
+            >
+              <Instagram size={18} />
+              @salunkeswarup8
+            </a>
           </div>
 
           <div className="contact-item">
